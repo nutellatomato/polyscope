@@ -45,7 +45,7 @@ BACKUP_DIR = os.path.join(UI_DIR, ".hector_scope_backup_v2")
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PAYLOAD_DIR = os.path.join(SCRIPT_DIR, "payload")
 MANIFEST_PATH = os.path.join(PAYLOAD_DIR, "manifest.json")
-PACKAGE_VERSION = "v3f"
+PACKAGE_VERSION = "v3f-t1"
 PRISTINE_DIR = os.path.join(PAYLOAD_DIR, "originals")   # baseline files carried on the USB
 MARKER_PATH = os.path.join(UI_DIR, ".hector_scope_v2_done")
 

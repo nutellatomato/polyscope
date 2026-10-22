@@ -44,6 +44,15 @@
 #define SCOPE_NOTIFY_TARGET_HZ 48.0
 #define SCOPE_NOTIFY_MIN_FRAMES 64
 #define SCOPE_FREQ_HYSTERESIS 0.02f
+/* Frequency detector tuning (see FreqDetector below). */
+#define SCOPE_FREQ_ENV_DECAY_S  0.25    /* envelope time constant */
+#define SCOPE_FREQ_MIN_PP       0.01f   /* quieter than this = no pitch */
+#define SCOPE_FREQ_HYST_RATIO   0.15f   /* Schmitt band, fraction of p-p */
+#define SCOPE_FREQ_WINDOW_S     0.05    /* min measurement window per update */
+#define SCOPE_FREQ_WINDOW_CYCLES 4u     /* ...and at least this many cycles */
+#define SCOPE_FREQ_JUMP_RATIO   0.03    /* >~50 cents change = new note, no glide */
+#define SCOPE_FREQ_SMOOTH       0.35    /* EMA weight for a new window's period */
+#define SCOPE_FREQ_TIMEOUT_S    2.0     /* no crossing this long -> report 0 Hz */
 
 enum PortIndex {
 	SCOPE_FREEZE = 0,
@@ -82,6 +91,143 @@ enum PortIndex {
 	SCOPE_PEAK_4,
 	SCOPE_HOLDOFF,   /* appended so all existing port indices stay stable */
 };
+
+/* Tuner-grade frequency detector, one per channel, run on the raw
+   full-rate signal (so it cannot alias).
+
+   - Crossings are taken at the midpoint of a peak envelope rather than at
+     0 V, so signals with a DC offset (unipolar gates, offset oscillators,
+     narrow pulses) are measured too. The envelope settles within one cycle
+     and, for a steady periodic signal, repeats exactly each cycle, so it
+     adds no period error.
+   - A Schmitt band sized to the signal's peak-to-peak rejects noise, but
+     the crossing time itself is the midpoint crossing linearly
+     interpolated between the two samples around it, i.e. sub-sample
+     accurate. Counting whole samples instead is off by up to ~16 cents at
+     A4 / 48 kHz.
+   - The period is measured over as many whole cycles as fit in
+     SCOPE_FREQ_WINDOW_S (at least SCOPE_FREQ_WINDOW_CYCLES), which divides the residual per-crossing error by
+     the cycle count, then lightly smoothed. A change larger than
+     SCOPE_FREQ_JUMP_RATIO is taken as a new note: it and the window after
+     it are adopted directly, with no glide. */
+typedef struct {
+	float    env_max;        /* decaying peak envelope */
+	float    env_min;
+	bool     have_env;
+	float    prev;           /* previous sample minus previous midpoint */
+	bool     armed;          /* went below the band since last crossing */
+	bool     have_candidate; /* a rising midpoint crossing seen while armed */
+	double   candidate;      /* its interpolated time, in samples */
+	bool     have_window;
+	double   window_start;   /* crossing time that opened the window */
+	uint32_t window_cycles;
+	bool     have_cross;
+	double   last_cross;     /* time of the latest accepted crossing */
+	double   period;         /* smoothed period in samples, 0 = none yet */
+	bool     fresh;          /* last update was a note change */
+} FreqDetector;
+
+static void
+freq_detector_reset(FreqDetector* det)
+{
+	memset(det, 0, sizeof(*det));
+}
+
+static void
+freq_detector_update_period(FreqDetector* det, double p)
+{
+	if (det->period <= 0.0 ||
+	    fabs(p - det->period) > det->period * SCOPE_FREQ_JUMP_RATIO) {
+		det->period = p;
+		det->fresh = true;  /* this window may straddle the change */
+	} else if (det->fresh) {
+		det->period = p;
+		det->fresh = false;
+	} else {
+		det->period += (p - det->period) * SCOPE_FREQ_SMOOTH;
+	}
+}
+
+/* Feed one raw sample taken at time `now` (in samples). */
+static void
+freq_detector_push(FreqDetector* det,
+                   float value,
+                   double now,
+                   float env_coeff,
+                   double window_samples,
+                   double timeout_samples)
+{
+	if (!det->have_env) {
+		det->env_max = value;
+		det->env_min = value;
+		det->have_env = true;
+	}
+	const float span = det->env_max - det->env_min;
+	det->env_max = value > det->env_max ? value : det->env_max - span * env_coeff;
+	det->env_min = value < det->env_min ? value : det->env_min + span * env_coeff;
+
+	const float pp = det->env_max - det->env_min;
+	const float v = value - 0.5f * (det->env_max + det->env_min);
+	if (pp < SCOPE_FREQ_MIN_PP) {
+		det->armed = false;
+		det->have_candidate = false;
+		det->prev = v;
+		return;
+	}
+	const float band = 0.5f * SCOPE_FREQ_HYST_RATIO * pp;
+
+	if (v < -band) {
+		det->armed = true;
+	}
+	if (det->armed) {
+		if (det->prev <= 0.0f && v > 0.0f) {
+			det->candidate = (now - 1.0) + (double)(-det->prev) / (double)(v - det->prev);
+			det->have_candidate = true;
+		}
+		if (v > band && det->have_candidate) {
+			const double t = det->candidate;
+			det->armed = false;
+			det->have_candidate = false;
+
+			if (!det->have_cross || (t - det->last_cross) > timeout_samples) {
+				/* first crossing, or the signal stopped: start over */
+				det->have_window = true;
+				det->window_start = t;
+				det->window_cycles = 0;
+			} else if (det->have_window) {
+				det->window_cycles += 1;
+				const double elapsed = t - det->window_start;
+				if (elapsed >= window_samples &&
+				    det->window_cycles >= SCOPE_FREQ_WINDOW_CYCLES) {
+					const double p = elapsed / (double)det->window_cycles;
+					if (p >= 4.0) {
+						freq_detector_update_period(det, p);
+					}
+					det->window_start = t;
+					det->window_cycles = 0;
+				}
+			}
+			det->have_cross = true;
+			det->last_cross = t;
+		}
+	}
+	det->prev = v;
+}
+
+static double
+freq_detector_hz(const FreqDetector* det,
+                 double now,
+                 double sample_rate,
+                 double timeout_samples)
+{
+	if (det->period <= 0.0 || !det->have_cross) {
+		return 0.0;
+	}
+	if ((now - det->last_cross) > timeout_samples) {
+		return 0.0;  /* signal stopped or is DC */
+	}
+	return sample_rate / det->period;
+}
 
 typedef struct {
 	LV2_URID_Map* urid_map;
@@ -124,9 +270,10 @@ typedef struct {
 	/* per-channel frequency measured from the raw full-rate signal
 	   (alias-free, unlike anything derived from the decimated frame) */
 	uint64_t     raw_count;
-	uint64_t     freq_last_cross[SCOPE_CHANNELS];
-	float        freq_period_ema[SCOPE_CHANNELS];
-	bool         freq_armed[SCOPE_CHANNELS];
+	FreqDetector freq[SCOPE_CHANNELS];
+	float        freq_env_coeff;
+	double       freq_window_samples;
+	double       freq_timeout_samples;
 	uint32_t     frame_write_index;
 	uint32_t     history_count;
 	uint32_t     decimation;
@@ -323,19 +470,13 @@ find_frame_start(const PolyScope* plugin)
 	return (uint32_t)found - pre_trigger;
 }
 
-static float
+static double
 current_frequency(const PolyScope* plugin, uint32_t channel)
 {
-	const float period = plugin->freq_period_ema[channel];
-	if (period <= 0.0f) {
-		return 0.0f;
-	}
-	/* decay to 0 when no crossing for 2 s (signal stopped or is DC) */
-	if ((plugin->raw_count - plugin->freq_last_cross[channel]) >
-	    (uint64_t)(plugin->sample_rate * 2.0)) {
-		return 0.0f;
-	}
-	return (float)plugin->sample_rate / period;
+	return freq_detector_hz(&plugin->freq[channel],
+	                        (double)plugin->raw_count,
+	                        plugin->sample_rate,
+	                        plugin->freq_timeout_samples);
 }
 
 static uint32_t
@@ -347,7 +488,7 @@ build_notify_packet(PolyScope* plugin)
 	   192 samples). */
 	int written = snprintf(plugin->notify_text,
 	                       sizeof(plugin->notify_text),
-	                       "PSCP|3|%u|%.2f,%.2f,%.2f,%.2f",
+	                       "PSCP|3|%u|%.3f,%.3f,%.3f,%.3f",
 	                       SCOPE_FRAME_SAMPLES,
 	                       current_frequency(plugin, 0),
 	                       current_frequency(plugin, 1),
@@ -516,6 +657,10 @@ instantiate(const LV2_Descriptor* descriptor,
 		plugin->notify_period_frames = SCOPE_NOTIFY_MIN_FRAMES;
 	}
 	plugin->decimation = 1;
+	plugin->freq_env_coeff =
+		(float)(1.0 - exp(-1.0 / (SCOPE_FREQ_ENV_DECAY_S * sample_rate)));
+	plugin->freq_window_samples = SCOPE_FREQ_WINDOW_S * sample_rate;
+	plugin->freq_timeout_samples = SCOPE_FREQ_TIMEOUT_S * sample_rate;
 
 	return (LV2_Handle)plugin;
 }
@@ -530,9 +675,7 @@ activate(LV2_Handle instance)
 		plugin->held_peak[channel] = 0.0f;
 		plugin->bucket_min[channel] = FLT_MAX;
 		plugin->bucket_max[channel] = -FLT_MAX;
-		plugin->freq_last_cross[channel] = 0;
-		plugin->freq_period_ema[channel] = 0.0f;
-		plugin->freq_armed[channel] = false;
+		freq_detector_reset(&plugin->freq[channel]);
 		for (uint32_t sample = 0; sample < SCOPE_HISTORY_SAMPLES; ++sample) {
 			plugin->history_data[channel][sample] = 0.0f;
 			plugin->history_min[channel][sample] = 0.0f;
@@ -641,22 +784,13 @@ run(LV2_Handle instance, uint32_t sample_count)
 				if (value > plugin->bucket_max[channel]) {
 					plugin->bucket_max[channel] = value;
 				}
-				/* alias-free frequency: rising-crossing period, hysteresis */
-				if (value < -SCOPE_FREQ_HYSTERESIS) {
-					plugin->freq_armed[channel] = true;
-				} else if (plugin->freq_armed[channel] && value > SCOPE_FREQ_HYSTERESIS) {
-					plugin->freq_armed[channel] = false;
-					if (plugin->freq_last_cross[channel] > 0) {
-						const uint64_t period = plugin->raw_count - plugin->freq_last_cross[channel];
-						if (period >= 4) {
-							plugin->freq_period_ema[channel] =
-								plugin->freq_period_ema[channel] > 0.0f
-								? (plugin->freq_period_ema[channel] * 0.75f) + ((float)period * 0.25f)
-								: (float)period;
-						}
-					}
-					plugin->freq_last_cross[channel] = plugin->raw_count;
-				}
+				/* alias-free, sub-sample frequency (see FreqDetector) */
+				freq_detector_push(&plugin->freq[channel],
+				                   value,
+				                   (double)plugin->raw_count,
+				                   plugin->freq_env_coeff,
+				                   plugin->freq_window_samples,
+				                   plugin->freq_timeout_samples);
 			}
 		}
 

@@ -22,8 +22,41 @@ REPLACE_CRITICAL=(module_info.py show_widget.py ingen_wrapper.py qml/PatchBayEff
 REPLACE_OPTIONAL=(headless.py)
 NEW_FILES=(qml/Polyscope.qml scope_util.py)
 
-sha() { shasum -a 256 "$1" | cut -d' ' -f1; }
-sha_git() { git -C "$UI" show "HEAD:$1" | shasum -a 256 | cut -d' ' -f1; }
+# Pristine firmware-407 copies of the replaced files (see baseline/README.md).
+BASELINE_DIR="${BASELINE_DIR:-$SCRIPT_DIR/baseline/firmware-407}"
+
+# Cross-compile toolchain. Override any of these from the environment.
+# LV2_CPPFLAGS: extra include flags for the LV2 headers, for hosts where
+# pkg-config reports them in the system include dir (which a cross compiler
+# does not search), e.g. LV2_CPPFLAGS=-I/path/containing/lv2-only
+ZIG="${ZIG:-zig}"
+if [ -z "${LLVM_STRIP:-}" ]; then
+  LLVM_STRIP="$(command -v llvm-strip 2>/dev/null || echo /opt/homebrew/opt/llvm/bin/llvm-strip)"
+fi
+
+if command -v shasum >/dev/null 2>&1; then
+  sha() { shasum -a 256 "$1" | cut -d' ' -f1; }
+else
+  sha() { sha256sum "$1" | cut -d' ' -f1; }
+fi
+sha_base() { sha "$BASELINE_DIR/$1"; }
+
+# Refuse to build from a baseline that has drifted from its recorded checksums.
+echo "Verifying firmware-407 baseline in $BASELINE_DIR..."
+while read -r want rel; do
+  [ -f "$BASELINE_DIR/$rel" ] || { echo "ERROR: baseline file missing: $rel" >&2; exit 1; }
+  [ "$(sha "$BASELINE_DIR/$rel")" = "$want" ] || { echo "ERROR: baseline file changed: $rel" >&2; exit 1; }
+done < "$BASELINE_DIR/SHA256SUMS"
+echo "  baseline OK."
+
+# The build tag must agree between the installer and the on-screen SETUP footer.
+PKG_TAG="$(sed -n 's/^PACKAGE_VERSION = "\(.*\)"/\1/p' "$SCRIPT_DIR/install_scope.py")"
+UI_TAG="$(sed -n 's/.*property string scopeBuild: "\([^"]*\)".*/\1/p' "$UI/qml/Polyscope.qml")"
+if [ -z "$PKG_TAG" ] || [ "$PKG_TAG" != "$UI_TAG" ]; then
+  echo "ERROR: build tag mismatch: install_scope.py='$PKG_TAG' Polyscope.qml='$UI_TAG'" >&2
+  exit 1
+fi
+echo "Build tag: $PKG_TAG"
 
 echo "=== Building HectorScope USB installer v2 (checksum-gated) ==="
 
@@ -32,19 +65,22 @@ echo "=== Building HectorScope USB installer v2 (checksum-gated) ==="
 PLUGIN2_BUILD="$SRC/PolyLV2/poly_scope2.lv2"
 SO2_BUILD="$PLUGIN2_BUILD/build/poly_scope2.so"
 echo "Rebuilding poly_scope2.so (polyscope)..."
-if command -v zig >/dev/null 2>&1 && pkg-config --exists lv2 2>/dev/null \
-   && [ -x /opt/homebrew/opt/llvm/bin/llvm-strip ]; then
+if command -v "$ZIG" >/dev/null 2>&1 && pkg-config --exists lv2 2>/dev/null \
+   && [ -x "$LLVM_STRIP" ]; then
   ( cd "$PLUGIN2_BUILD"
     make clean >/dev/null
     ZIG_GLOBAL_CACHE_DIR="${TMPDIR:-/tmp}/zig-global-cache" \
     ZIG_LOCAL_CACHE_DIR="${TMPDIR:-/tmp}/zig-local-cache" \
-    make UNAME=Linux CC='zig cc -target aarch64-linux-gnu' \
-         STRIP='/opt/homebrew/opt/llvm/bin/llvm-strip' >/dev/null )
+    make UNAME=Linux CC="$ZIG cc -target aarch64-linux-gnu" \
+         CPPFLAGS="${LV2_CPPFLAGS:-}" \
+         STRIP="$LLVM_STRIP" >/dev/null )
   echo "  rebuilt."
-elif [ -f "$SO2_BUILD" ]; then
-  echo "  zig toolchain unavailable; using existing $SO2_BUILD"
+elif [ -f "$SO2_BUILD" ] && [ "${ALLOW_PREBUILT_PLUGIN:-0}" = 1 ]; then
+  echo "  zig toolchain unavailable; ALLOW_PREBUILT_PLUGIN=1, using existing $SO2_BUILD"
+  echo "  WARNING: this plugin may not match the current poly_scope2.c source."
 else
-  echo "ERROR: no poly_scope2.so and cannot cross-compile. Install zig + lv2 + llvm." >&2
+  echo "ERROR: cannot cross-compile poly_scope2.so. Install zig, the LV2 headers and llvm-strip (or set ZIG / LLVM_STRIP)." >&2
+  echo "       To package an existing build/poly_scope2.so anyway, set ALLOW_PREBUILT_PLUGIN=1." >&2
   exit 1
 fi
 fout2_build="$(file "$SO2_BUILD")"
@@ -77,7 +113,7 @@ done
 # can reset even if the on-device backup is missing.
 mkdir -p "$PAY/originals/qml"
 for f in module_info.py show_widget.py ingen_wrapper.py headless.py qml/PatchBayEffect.qml; do
-  git -C "$UI" show "HEAD:$f" > "$PAY/originals/$f"
+  cp "$BASELINE_DIR/$f" "$PAY/originals/$f"
 done
 echo "  staged pristine originals into install payload"
 
@@ -93,7 +129,7 @@ cp "$PLUGIN2/manifest.ttl" "$PAY/lv2/poly_scope2.lv2/manifest.ttl"
 # Installer entry point.
 cp "$SCRIPT_DIR/install_scope.py" "$OUT/hector-scope-patch/install_scope.py"
 
-# ── 4. Generate manifest.json (baseline from git, patched from tree) ─
+# ── 4. Generate manifest.json (baseline from baseline/, patched from tree) ─
 
 {
   echo "{"
@@ -102,12 +138,12 @@ cp "$SCRIPT_DIR/install_scope.py" "$OUT/hector-scope-patch/install_scope.py"
   for f in "${REPLACE_CRITICAL[@]}"; do
     [ $first -eq 1 ] && first=0 || echo ","
     printf '    "%s": {"baseline": "%s", "patched": "%s", "critical": true}' \
-      "$f" "$(sha_git "$f")" "$(sha "$UI/$f")"
+      "$f" "$(sha_base "$f")" "$(sha "$UI/$f")"
   done
   for f in "${REPLACE_OPTIONAL[@]}"; do
     echo ","
     printf '    "%s": {"baseline": "%s", "patched": "%s", "critical": false}' \
-      "$f" "$(sha_git "$f")" "$(sha "$UI/$f")"
+      "$f" "$(sha_base "$f")" "$(sha "$UI/$f")"
   done
   echo ""
   echo "  },"
@@ -351,12 +387,12 @@ shutdown -h now 2>/dev/null || poweroff 2>/dev/null || true
 RECEOF
 chmod 0755 "$REC/debug.sh"
 
-# Stage pristine baseline originals (from the clean 407 git commit) onto the
+# Stage pristine baseline originals (from baseline/firmware-407) onto the
 # recovery USB as a last-resort restore source. module_info.js is regenerated
 # on-device from module_info.py, so it is not carried here.
 mkdir -p "$REC/originals/qml"
 for f in module_info.py show_widget.py ingen_wrapper.py headless.py qml/PatchBayEffect.qml; do
-  git -C "$UI" show "HEAD:$f" > "$REC/originals/$f"
+  cp "$BASELINE_DIR/$f" "$REC/originals/$f"
 done
 echo "  staged pristine originals on recovery USB"
 

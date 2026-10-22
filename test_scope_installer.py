@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """End-to-end sandbox test for the HectorScope checksum-gated installer.
 
-Builds a fake /home/debian/UI from the real git-baseline (HEAD) files,
+Builds a fake /home/debian/UI from the pristine baseline/firmware-407 files,
 points the installer at it, and exercises every path:
   1. fresh baseline install      -> success, files become patched
   2. idempotent re-run           -> success, no changes
@@ -34,11 +34,13 @@ def check(name, cond):
     print(f"  [{'PASS' if cond else 'FAIL'}] {name}")
 
 
+BASELINE_DIR = os.path.join(REPO, "baseline", "firmware-407")
+
+
 def git_baseline(rel, dst):
-    out = subprocess.check_output(["git", "-C", UI_SRC, "show", f"HEAD:{rel}"])
+    """Copy the pristine firmware-407 file (baseline/firmware-407) to dst."""
     os.makedirs(os.path.dirname(dst), exist_ok=True)
-    with open(dst, "wb") as f:
-        f.write(out)
+    shutil.copyfile(os.path.join(BASELINE_DIR, rel), dst)
 
 
 def fresh_sandbox():

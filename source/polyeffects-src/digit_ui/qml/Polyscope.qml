@@ -9,8 +9,8 @@ Item {
     height: 620
 
     property string effect: "scope1"
-    property string scopeBuild: "v3f"   // shown in SETUP so the running build is verifiable
-    property string uiPage: "main"        // "main" | "setup" | "channel" | "fullscreen"
+    property string scopeBuild: "v3f-t1"   // shown in SETUP so the running build is verifiable
+    property string uiPage: "main"        // "main" | "setup" | "channel" | "fullscreen" | "tuner"
     property int activeChannel: 0          // 0..3, channel shown on the channel page
     property bool autoTrigger: false       // auto-track the trigger threshold to the SYNC'd channel midpoint
     function applyAutoTrigger() {
@@ -95,6 +95,38 @@ Item {
     property var hfMin: [null, null, null, null]
     property var hfMax: [null, null, null, null]
     property var pluginFreqs: [0.0, 0.0, 0.0, 0.0]
+
+    // ── Tuner ──────────────────────────────────────────────────────
+    // Reads the plugin-measured frequency (sub-sample, alias-free) straight
+    // from each packet, so it updates at the frame rate rather than on the
+    // slower stats beat. The reference pitch lives only in the UI (no plugin
+    // port), so it resets to 440 Hz when the scope is reloaded.
+    property int tunerChannel: 0
+    property real tunerA4: 440.0
+    property real tunerInTuneCents: 3.0
+    property var tunerNoteNames: ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+    function tunerValid(hz) { return hz >= 16.0 && hz <= 8000.0 }
+    // fractional MIDI note number (A4 = 69)
+    function tunerMidi(hz) { return 69.0 + 12.0 * Math.log(hz / tunerA4) / Math.LN2 }
+    function tunerCents(hz) {
+        if (!tunerValid(hz)) {
+            return 0.0
+        }
+        var m = tunerMidi(hz)
+        return (m - Math.round(m)) * 100.0
+    }
+    function tunerNoteName(hz) {
+        if (!tunerValid(hz)) {
+            return "—"
+        }
+        var n = Math.round(tunerMidi(hz))
+        return tunerNoteNames[((n % 12) + 12) % 12] + (Math.floor(n / 12) - 1)
+    }
+    function tunerTargetHz(hz) {
+        return tunerA4 * Math.pow(2.0, (Math.round(tunerMidi(hz)) - 69) / 12.0)
+    }
+    function formatCents(c) { return (c >= 0.05 ? "+" : (c <= -0.05 ? "−" : "±")) + Math.abs(c).toFixed(1) + " ¢" }
+    function stepTunerA4(delta) { tunerA4 = Math.max(400.0, Math.min(480.0, tunerA4 + delta)) }
     property bool hfDetail: true           // SETUP toggle: draw the envelope
     property var hfSignificant: [false, false, false, false]
     property var holdoffValues: [0, 1, 2, 5, 10, 20, 50, 100, 200, 500]
@@ -189,7 +221,9 @@ Item {
                 scopeView._gridDirty = false
                 gridCanvas.requestPaint()
             }
-            if (scopeView._paintDirty) {
+            // The trace is hidden behind the tuner page; keep the dirty flag
+            // and repaint on return instead of drawing an unseen canvas.
+            if (scopeView._paintDirty && scopeView.uiPage !== "tuner") {
                 scopeView._paintDirty = false
                 chart.requestPaint()
             }
@@ -1917,13 +1951,22 @@ Item {
                 Repeater {
                     model: ["STACK","OVR","XY12","XY34"]
                     delegate: Rectangle {
-                        width: 78; height: 54; radius: 7
+                        width: 62; height: 54; radius: 7
                         color: scopeView.viewMode === index ? "#24374C" : "transparent"
                         Text { anchors.centerIn: parent; text: modelData
                                color: scopeView.viewMode === index ? "#90E7D0" : "#D7E6F5"
                                font.family: mainFont.name; font.pixelSize: 16; font.capitalization: Font.AllUppercase }
                         MouseArea { anchors.fill: parent; onClicked: scopeView.setIntControl("view_mode", index) }
                     }
+                }
+                // Not a view_mode value: the tuner is its own page, so the
+                // plugin's view_mode port range stays as it is.
+                Rectangle {
+                    width: 62; height: 54; radius: 7; color: "transparent"
+                    border.color: "#355"; border.width: 1
+                    Text { anchors.centerIn: parent; text: "TUNE"; color: "#D7E6F5"
+                           font.family: mainFont.name; font.pixelSize: 16; font.capitalization: Font.AllUppercase }
+                    MouseArea { anchors.fill: parent; onClicked: scopeView.openPage("tuner") }
                 }
             }
         }
@@ -2203,6 +2246,173 @@ Item {
         }
     }
 
+
+    // ── Tuner sub-page ──────────────────────────────────────────────
+    Item {
+        id: tunerPage
+        anchors.fill: parent
+        visible: scopeView.uiPage === "tuner"
+        property int ch: scopeView.tunerChannel
+        property real hz: scopeView.pluginFreqs.length > ch ? scopeView.pluginFreqs[ch] : 0.0
+        property bool valid: scopeView.tunerValid(hz)
+        property real cents: scopeView.tunerCents(hz)
+        property bool inTune: valid && Math.abs(cents) <= scopeView.tunerInTuneCents
+        property color chColor: scopeView.channelColors[ch]
+
+        Rectangle { anchors.fill: parent; color: "#080C11" }
+        Rectangle { x: 0; y: 0; width: parent.width; height: 4; color: tunerPage.chColor }
+
+        Rectangle {
+            x: 16; y: 16; width: 190; height: 64; radius: 10; color: "#13212E"; border.color: "#284055"; border.width: 1
+            Text { anchors.centerIn: parent; text: "‹ BACK"; color: "#D7E6F5"; font.family: mainFont.name
+                   font.pixelSize: 26; font.capitalization: Font.AllUppercase }
+            MouseArea { anchors.fill: parent; onClicked: scopeView.backToMain() }
+        }
+        Text { x: 230; y: 32; text: "TUNER"; color: "#90E7D0"; font.family: mainFont.name
+               font.pixelSize: 26; font.capitalization: Font.AllUppercase }
+
+        // reference pitch
+        Rectangle {
+            x: tunerPanel.x + tunerPanel.width - width; y: 16; width: 330; height: 64; radius: 10
+            color: "#0e1a25"; border.color: "#284055"; border.width: 1
+            Row {
+                anchors.fill: parent; anchors.margins: 6; spacing: 6
+                Rectangle { width: 64; height: 52; radius: 8; color: "#13212E"; border.color: "#355"; border.width: 1
+                    Text { anchors.centerIn: parent; text: "−"; color: "#D7E6F5"; font.family: mainFont.name; font.pixelSize: 30 }
+                    MouseArea { anchors.fill: parent; onClicked: scopeView.stepTunerA4(-1.0) } }
+                Column { width: 178; anchors.verticalCenter: parent.verticalCenter
+                    Text { width: parent.width; horizontalAlignment: Text.AlignHCenter; text: "REFERENCE"
+                           color: "#7e93a8"; font.family: mainFont.name; font.pixelSize: 14; font.capitalization: Font.AllUppercase }
+                    Text { width: parent.width; horizontalAlignment: Text.AlignHCenter
+                           text: "A4 = " + scopeView.tunerA4.toFixed(0) + " Hz"; color: "#cfe"
+                           font.family: mainFont.name; font.pixelSize: 22 } }
+                Rectangle { width: 64; height: 52; radius: 8; color: "#13212E"; border.color: "#355"; border.width: 1
+                    Text { anchors.centerIn: parent; text: "+"; color: "#D7E6F5"; font.family: mainFont.name; font.pixelSize: 30 }
+                    MouseArea { anchors.fill: parent; onClicked: scopeView.stepTunerA4(1.0) } }
+            }
+            MouseArea { x: 76; width: 178; height: parent.height; onDoubleClicked: scopeView.tunerA4 = 440.0 }
+        }
+
+        // ── main readout for the selected channel ──
+        Rectangle {
+            id: tunerPanel
+            x: 16; y: 96
+            width: parent.width - 16 - 12 - 200 - 16
+            height: parent.height - 96 - 16
+            radius: 12; color: "#0D141D"
+            border.color: tunerPage.inTune ? "#9be77a" : "#223140"; border.width: tunerPage.inTune ? 2 : 1
+
+            Text {
+                id: noteText
+                anchors.horizontalCenter: parent.horizontalCenter
+                y: 14
+                text: scopeView.tunerNoteName(tunerPage.hz)
+                color: !tunerPage.valid ? "#3d4f61" : (tunerPage.inTune ? "#9be77a" : "#D7E6F5")
+                font.family: mainFont.name; font.pixelSize: 190; font.bold: true
+            }
+
+            // cents meter, −50 … +50
+            Item {
+                id: meter
+                x: 48; y: 250
+                width: parent.width - 96; height: 96
+                property real centerX: width / 2
+
+                // in-tune zone
+                Rectangle {
+                    x: meter.centerX - (scopeView.tunerInTuneCents / 50.0) * meter.centerX
+                    width: (scopeView.tunerInTuneCents / 50.0) * meter.width
+                    y: 0; height: meter.height; radius: 4
+                    color: tunerPage.inTune ? "#2a4a2a" : "#15241c"
+                }
+                // baseline
+                Rectangle { x: 0; y: meter.height / 2 - 1; width: meter.width; height: 2; color: "#284055" }
+                // ticks every 10 cents
+                Repeater {
+                    model: 11
+                    delegate: Rectangle {
+                        property int c: -50 + index * 10
+                        width: c === 0 ? 4 : 2
+                        height: c === 0 ? meter.height : (c % 50 === 0 ? 56 : 32)
+                        x: meter.centerX + (c / 50.0) * meter.centerX - width / 2
+                        y: (meter.height - height) / 2
+                        color: c === 0 ? "#7e93a8" : "#355"
+                    }
+                }
+                Text { x: 0; y: meter.height + 4; text: "−50"; color: "#546678"; font.family: mainFont.name; font.pixelSize: 16 }
+                Text { x: meter.width - width; y: meter.height + 4; text: "+50"; color: "#546678"; font.family: mainFont.name; font.pixelSize: 16 }
+                Text { x: meter.centerX - width / 2; y: meter.height + 4; text: "0"; color: "#546678"; font.family: mainFont.name; font.pixelSize: 16 }
+
+                // marker
+                Rectangle {
+                    visible: tunerPage.valid
+                    width: 10; height: meter.height + 12; radius: 3
+                    y: -6
+                    x: meter.centerX + (Math.max(-50.0, Math.min(50.0, tunerPage.cents)) / 50.0) * meter.centerX - width / 2
+                    color: tunerPage.inTune ? "#9be77a" : tunerPage.chColor
+                }
+            }
+
+            Row {
+                anchors.horizontalCenter: parent.horizontalCenter
+                y: meter.y + meter.height + 44
+                spacing: 48
+                visible: tunerPage.valid
+                Text { text: scopeView.formatCents(tunerPage.cents)
+                       color: tunerPage.inTune ? "#9be77a" : "#D7E6F5"; font.family: mainFont.name; font.pixelSize: 34 }
+                Text { text: tunerPage.hz.toFixed(2) + " Hz"; color: "#D7E6F5"; font.family: mainFont.name; font.pixelSize: 34 }
+                Text { y: 9; text: "target " + scopeView.tunerTargetHz(tunerPage.hz).toFixed(2) + " Hz"
+                       color: "#7e93a8"; font.family: mainFont.name; font.pixelSize: 22 }
+            }
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                y: meter.y + meter.height + 44
+                visible: !tunerPage.valid
+                text: scopeView.freeze ? "The scope is frozen. Tap RUN to measure again."
+                                       : "No pitch on " + scopeView.channelLabels[tunerPage.ch] + ". Patch an oscillator into it."
+                color: "#7e93a8"; font.family: mainFont.name; font.pixelSize: 24
+            }
+            Rectangle {
+                visible: scopeView.freeze
+                anchors.horizontalCenter: parent.horizontalCenter
+                y: meter.y + meter.height + 88; width: 160; height: 52; radius: 10
+                color: "#24374C"; border.color: "#FFD166"; border.width: 1
+                Text { anchors.centerIn: parent; text: "RUN"; color: "#FFD166"; font.family: mainFont.name
+                       font.pixelSize: 22; font.capitalization: Font.AllUppercase }
+                MouseArea { anchors.fill: parent; onClicked: scopeView.toggleFreeze() }
+            }
+        }
+
+        // ── all four channels; tap one to show it above ──
+        Column {
+            x: scopeView.width - 200 - 16; y: 96; width: 200; spacing: 8
+            Repeater {
+                model: 4
+                delegate: Rectangle {
+                    property real hz: scopeView.pluginFreqs.length > index ? scopeView.pluginFreqs[index] : 0.0
+                    property bool valid: scopeView.tunerValid(hz)
+                    property real cents: scopeView.tunerCents(hz)
+                    property bool inTune: valid && Math.abs(cents) <= scopeView.tunerInTuneCents
+                    property bool selected: scopeView.tunerChannel === index
+                    width: 200
+                    height: (scopeView.height - 96 - 16 - 3 * 8) / 4
+                    radius: 8
+                    color: selected ? "#24374C" : "#13212E"
+                    border.color: selected ? scopeView.channelColors[index] : "#284055"
+                    border.width: selected ? 2 : 1
+                    Text { x: 12; y: 10; text: scopeView.channelLabels[index]; color: scopeView.channelColors[index]
+                           font.family: mainFont.name; font.pixelSize: 17; font.bold: true }
+                    Text { x: 12; y: 40; text: scopeView.tunerNoteName(parent.hz)
+                           color: !parent.valid ? "#3d4f61" : (parent.inTune ? "#9be77a" : "#D7E6F5")
+                           font.family: mainFont.name; font.pixelSize: 40; font.bold: true }
+                    Text { anchors.right: parent.right; anchors.rightMargin: 12; y: 10
+                           visible: parent.valid; text: scopeView.formatCents(parent.cents)
+                           color: parent.inTune ? "#9be77a" : "#9fb6cc"; font.family: mainFont.name; font.pixelSize: 17 }
+                    MouseArea { anchors.fill: parent; onClicked: scopeView.tunerChannel = index }
+                }
+            }
+        }
+    }
 
 
     // ── Fullscreen trace viewer ─────────────────────────────────────
