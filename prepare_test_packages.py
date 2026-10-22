@@ -44,6 +44,8 @@ def payload_files(folder):
 
 
 def main():
+    release_version = (ROOT / 'VERSION').read_text().strip()
+    assert re.fullmatch(r'\d+\.\d+\.\d+', release_version), 'Invalid VERSION'
     OUT.mkdir(exist_ok=True)
     LOG.mkdir(exist_ok=True)
     if os.environ.get('ALLOW_PREBUILT_PLUGIN') == '1':
@@ -92,8 +94,8 @@ def main():
                'source/polyeffects-src/PolyLV2/poly_scope2.lv2/poly_scope2.ttl',
                'source/polyeffects-src/PolyLV2/poly_scope2.lv2/manifest.ttl']
     sources += [str((Path('source/polyeffects-src/digit_ui') / rel)) for rel in list(manifest['replace']) + list(manifest['new'])]
-    sources += [p.name for p in ROOT.glob('test_*.py')] + ['prepare_test_packages.py', 'requirements-test.txt', 'HECTOR_TEST_GUIDE.md', 'README.md', 'pytest.ini', 'docs/HARDWARE_VALIDATION.json', 'docs/TUNER_INTEGRATION.md', 'REVIEW_REPORT.md']
-    receipt = {'tag': tag, 'pr2_commit': 'a16aed3c2a591c3eea56cc88aec979fca476a465',
+    sources += [p.name for p in ROOT.glob('test_*.py')] + ['prepare_test_packages.py', 'requirements-test.txt', 'HECTOR_TEST_GUIDE.md', 'README.md', 'pytest.ini', 'docs/HARDWARE_VALIDATION.json', 'docs/TUNER_INTEGRATION.md', 'REVIEW_REPORT.md', 'VERSION']
+    receipt = {'release_version': release_version, 'tag': tag, 'pr2_commit': 'a16aed3c2a591c3eea56cc88aec979fca476a465',
                'base_commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
                'target': 'aarch64-linux-gnu.2.17', 'zig': subprocess.check_output([os.environ.get('ZIG', 'zig'), 'version'], text=True).strip(),
                'tests': len(cases), 'skipped': 0, 'hardware_tested': hardware_report_matches(install),
@@ -108,7 +110,7 @@ def main():
         (folder / 'SHA256SUMS').write_text(''.join(sha(p) + '  ./' + p.relative_to(folder).as_posix() + '\n' for p in entries))
     archives = []
     for kind, folder in [('installer', install), ('recovery', recovery)]:
-        dest = OUT / f'Polyscope-USB-{kind}-{tag}-review.zip'
+        dest = OUT / f'Polyscope-USB-{kind}-v{release_version}.zip'
         with zipfile.ZipFile(dest, 'w', zipfile.ZIP_DEFLATED) as z:
             for p in payload_files(folder):
                 z.write(p, p.relative_to(folder))

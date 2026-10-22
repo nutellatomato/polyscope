@@ -4,11 +4,11 @@ Public releases use semantic versioning. Each release also lists the
 internal build tag it ships (shown on the device's SETUP page and in the
 perf log), so an on-device build tag can always be matched to a release.
 
-## Unreleased — tuner integration (build `v3f-t1-h1`)
+## v2.1.0 — 2026-10-22 (build `v3f-t1-h1`)
 
 The repository owner confirmed successful use of this build on their Hector
 on 2026-10-22. This records an owner report, not a measured hardware test matrix.
-The latest published release remains v2.0.0.
+This release adds the tuner and checked installer/recovery payloads.
 
 ### Added
 

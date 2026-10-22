@@ -1,10 +1,10 @@
 # Hector firmware-407 test
 
-Current repository build: `v3f-t1-h1`, for Hector firmware 407.
+Release `v2.1.0`, on-device build `v3f-t1-h1`, for Hector firmware 407.
 The owner reported successful use on their Hector on 2026-10-22.
 See `docs/HARDWARE_VALIDATION.json` for the exact scope and runtime hashes.
 No per-case hardware measurements or recovery test results were supplied.
-No tuner release has been published yet.
+Download the installer and separate recovery ZIP from the v2.1.0 release page.
 Keep a separate, known-working recovery USB.
 Back up your patches first.
 Do not use this build on another firmware version.

@@ -1,9 +1,10 @@
 # Tuner integration
 
 Build: `v3f-t1-h1` for Poly Effects Hector firmware 407.
-No tuner release has been published yet.
-The repository contains the current source and ready-to-copy `dist/` folders.
-The older v2.0.0 release assets remain unchanged.
+Release: v2.1.0. The version is recorded in `VERSION`.
+The release provides installer and recovery ZIPs plus SHA-256 checksums.
+The repository contains the matching source and ready-to-copy `dist/` folders.
+The older v2.0.0 release assets remain available.
 
 ## Contribution
 
@@ -53,4 +54,5 @@ Qt tests use Qt 6 on the host; they are separate from the owner's Hector report.
 6. Verify that main has both contributor commits and the checked payload.
 
 PR #1 is included through PR #2; it does not need a second copy of its changes.
-A release tag and release assets require a separate publication step.
+The v2.1.0 release tag selects the release preparation commit on main.
+The checked ZIPs are attached to that GitHub Release.

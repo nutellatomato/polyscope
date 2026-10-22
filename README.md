@@ -4,12 +4,11 @@ A four-channel oscilloscope and tuner for the **Poly Effects Hector**.
 This community patch adds a full-screen UI and an LV2 plugin.
 An LV2 plugin is the part that measures and passes the signals through Hector.
 
-**Current repository build: `v3f-t1-h1`.** The owner confirmed that this build
-works on their Hector on 22 October 2026. It targets **firmware 407**.
-The source, ARM64 plugin, installer and recovery files are included here.
-No tuner release has been published yet. The last published release is
-[`v2.0.0`](https://github.com/nutellatomato/polyscope/releases/tag/v2.0.0),
-with on-device tag `v3f`; that release does not include the tuner.
+**Latest release: [v2.1.0](https://github.com/nutellatomato/polyscope/releases/tag/v2.1.0)**
+(on-device build `v3f-t1-h1`). The owner confirmed successful use on their
+Hector on 22 October 2026. This release targets **firmware 407**.
+Download the installer and separate recovery ZIP from the release page.
+The source, ARM64 plugin and ready-to-copy files are also included in `dist/`.
 
 Formerly called *HectorScope*. The old folder names remain in the installer.
 See [CHANGELOG.md](CHANGELOG.md) for the build history.
@@ -31,7 +30,17 @@ See [CHANGELOG.md](CHANGELOG.md) for the build history.
 - Adjustable A4 reference from 400 to 480 Hz in 1 Hz steps.
 - A frequency detector that handles DC offsets and measures between samples.
 
-## Install the current repository build
+## Install the latest release
+
+1. Open the [v2.1.0 release page](https://github.com/nutellatomato/polyscope/releases/tag/v2.1.0).
+2. Download `Polyscope-USB-installer-v2.1.0.zip`,
+   `Polyscope-USB-recovery-v2.1.0.zip` and `SHA256SUMS`.
+3. Check the ZIP hashes against `SHA256SUMS`.
+4. Extract each ZIP. Copy the installer ZIP contents directly to the root of
+   the install stick. Prepare the recovery ZIP on a separate stick.
+5. Follow steps 4–9 below to install and check the on-device build tag.
+
+## Install from the repository
 
 Use a Hector on **firmware 407** and a FAT32 USB stick.
 Back up your patches and prepare a separate recovery stick first.
@@ -118,6 +127,8 @@ The target is Linux ARM64 with GLIBC 2.17, the Linux system-library baseline.
 
 The package command rebuilds the plugin and runs the full suite.
 It rejects skipped tests, checks the binary and verifies both ZIPs.
+The release version comes from `VERSION`.
+The installer and recovery ZIPs use that version in their filenames.
 The output goes to `test-artifacts/`; logs and tuner images go to `validation/`.
 For a build without the full suite, run `bash "build_scope_usb_v2.sh"`.
 That command regenerates the two `dist/` folders.
