@@ -7,7 +7,7 @@ that it works perfectly on their machine.
 See [the owner-report record](docs/HARDWARE_VALIDATION.json) for the runtime hashes.
 This is an owner report; no per-case measurements were supplied.
 Recovery and power-loss behavior have not been confirmed on hardware.
-No tuner release has been published.
+Release v2.1.0 ships this same checked runtime build.
 
 ## Review source
 
@@ -107,4 +107,4 @@ The host checks and Qt 6 render remain separate test evidence.
 Power loss during a write and a device that cannot start USB debug remain untested.
 The recovery package restores the firmware-407 UI baseline; it is not a full firmware image.
 Keep the known-working firmware recovery path available.
-The integration is submitted through pull requests. Release publication remains a separate step.
+PRs #1, #2 and #3 are merged. Release v2.1.0 packages the checked integration.

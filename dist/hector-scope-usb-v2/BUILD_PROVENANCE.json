@@ -1,7 +1,8 @@
 {
+  "release_version": "2.1.0",
   "tag": "v3f-t1-h1",
   "pr2_commit": "a16aed3c2a591c3eea56cc88aec979fca476a465",
-  "base_commit": "b0f72ea11b792a722032ff9f15a2a81ee24d401d",
+  "base_commit": "f78806af1d6b9623836801b9978a3ef045118284",
   "target": "aarch64-linux-gnu.2.17",
   "zig": "0.16.0",
   "tests": 58,
@@ -37,13 +38,14 @@
     "test_scope_installer.py": "1452aa896aa138aced0d4c9765592c3c961ee2f7da696e4066006f669d8b273d",
     "test_tuner_ui.py": "8f89879fb0fa7d708c260259107e83cf3e986ec2cb74cc8a7a151319f985b577",
     "test_freq_detector.py": "e7ec370b4a31b1f5fe4ddfb4668f2d8dba25a6b9f8af4acd92e513488fce3164",
-    "prepare_test_packages.py": "1a9c9253204da574b97d7d59df38db5e7495fb07de5042d75f43473479762769",
+    "prepare_test_packages.py": "d399e7c814766b60398e6ff53cc8efa4c35391f4df5b77de4969fa6a2fe8a9b0",
     "requirements-test.txt": "3bd23691376fe7308f27295d51d5e276956f01c452168c0a3a36922ac650ace1",
-    "HECTOR_TEST_GUIDE.md": "73709fb41e2daae5769c81c7744bfd87e1526364c62c5d6d99b3bab162c7d45b",
-    "README.md": "f9514d3020869f912845df788f6ee3bcd5298f75d5353240ec0f9cd93658425b",
+    "HECTOR_TEST_GUIDE.md": "afbe249a8a4136d3c415793accc42c8defab15ca795807209d7ede0cdf0dc319",
+    "README.md": "8f1da6797d57f6d3f16de7ee5a00a1a655d0d44554bfe89b1fbb8299a0d415c4",
     "pytest.ini": "ead20977898508f9c9faf2762e5fd27bf295944bffeda853755801d6abd3a0c0",
     "docs/HARDWARE_VALIDATION.json": "2aca4ef4e218406c2733281b294a047e623737ef57e645fa6a34d7aa85d65868",
-    "docs/TUNER_INTEGRATION.md": "950c7a60f0603f21911c98630b59a62bbe8646b84fd2691b4b3c793acfba6398",
-    "REVIEW_REPORT.md": "c5ddc33be931a9ff94fd75683c774bf7252c9b54053f5141b72568d868f7d61e"
+    "docs/TUNER_INTEGRATION.md": "c466a92819791a2d0cf6c0e58aec81251279872d04bba3562d1989764d6966aa",
+    "REVIEW_REPORT.md": "f279d3e733fdcfc25203666a2100de265102900b7fac9de8dc11c51e4329e6ed",
+    "VERSION": "c89b87c262e9d5ffd20e73aac74a1772adcc9f5a21682cc33adcf5086e5fef5c"
   }
 }
