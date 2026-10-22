@@ -49,7 +49,7 @@
 #define SCOPE_FREQ_MIN_PP       0.01f   /* quieter than this = no pitch */
 #define SCOPE_FREQ_HYST_RATIO   0.15f   /* Schmitt band, fraction of p-p */
 #define SCOPE_FREQ_WINDOW_S     0.05    /* min measurement window per update */
-#define SCOPE_FREQ_WINDOW_CYCLES 4u     /* ...and at least this many cycles */
+#define SCOPE_FREQ_WINDOW_CYCLES 4u     /* audio-rate minimum cycles */
 #define SCOPE_FREQ_JUMP_RATIO   0.03    /* >~50 cents change = new note, no glide */
 #define SCOPE_FREQ_SMOOTH       0.35    /* EMA weight for a new window's period */
 #define SCOPE_FREQ_TIMEOUT_S    2.0     /* no crossing this long -> report 0 Hz */
@@ -106,7 +106,7 @@ enum PortIndex {
      accurate. Counting whole samples instead is off by up to ~16 cents at
      A4 / 48 kHz.
    - The period is measured over as many whole cycles as fit in
-     SCOPE_FREQ_WINDOW_S (at least SCOPE_FREQ_WINDOW_CYCLES), which divides the residual per-crossing error by
+     SCOPE_FREQ_WINDOW_S (four cycles at audio rate, one for slow CV), which divides the residual per-crossing error by
      the cycle count, then lightly smoothed. A change larger than
      SCOPE_FREQ_JUMP_RATIO is taken as a new note: it and the window after
      it are adopted directly, with no glide. */
@@ -197,8 +197,11 @@ freq_detector_push(FreqDetector* det,
 			} else if (det->have_window) {
 				det->window_cycles += 1;
 				const double elapsed = t - det->window_start;
+				/* Allow midpoint startup error near the 10-Hz slow-window boundary. */
+				const double mean_cycle = elapsed / (double)det->window_cycles;
+				const bool slow_cycle = mean_cycle >= 1.9 * window_samples;
 				if (elapsed >= window_samples &&
-				    det->window_cycles >= SCOPE_FREQ_WINDOW_CYCLES) {
+				    (det->window_cycles >= SCOPE_FREQ_WINDOW_CYCLES || slow_cycle)) {
 					const double p = elapsed / (double)det->window_cycles;
 					if (p >= 4.0) {
 						freq_detector_update_period(det, p);

@@ -10,7 +10,7 @@ on_error() {
   echo
   echo "=========================================="
   echo "HectorScope install ended with status ${status}."
-  echo "If non-zero, the installer rolled back; the device is unchanged."
+  echo "Read the log for rollback status. Keep the recovery USB ready."
   echo "Log: ${LOG}"
   echo "Safe to power off, REMOVE the USB, then power on."
   echo "=========================================="
@@ -30,7 +30,7 @@ SETTINGS_QML="/home/debian/UI/qml/Settings.qml"
 [ -f "$SETTINGS_QML" ] || { echo "ERROR: $SETTINGS_QML not found. Is this a Hector?"; exit 1; }
 FW="$(sed -n -e 's|.* FIRMWARE \([0-9][0-9]*\).*|\1|p' "$SETTINGS_QML" | head -n 1 || true)"
 case "$FW" in ''|*[!0-9]*) echo "ERROR: could not detect firmware."; exit 1 ;; esac
-[ "$FW" -ge 407 ] || { echo "ERROR: firmware $FW < 407."; exit 1; }
+[ "$FW" -eq 407 ] || { echo "ERROR: this test package requires firmware 407; found $FW."; exit 1; }
 echo "Firmware: $FW"
 
 PATCH="/usb_flash/hector-scope-patch"
@@ -42,7 +42,7 @@ if ! mkdir "$LOCKDIR" 2>/dev/null; then
   echo "Another HectorScope install run is already in progress; exiting to avoid a conflict."
   exit 0
 fi
-trap 'rmdir "$LOCKDIR" 2>/dev/null || true' EXIT
+trap 'if [ "${PERSIST:-0}" = 1 ]; then sync; mount -o remount,ro "$LOWERDIR" 2>/dev/null || true; fi; rmdir "$LOCKDIR" 2>/dev/null || true' EXIT
 
 # --- Detect overlay root and target the PERSISTENT lower layer ---
 # On these units "/" is an overlay whose upper layer is tmpfs (RAM, wiped on
@@ -113,7 +113,7 @@ else
   sync
   remount_ro
   echo "=========================================="
-  echo "Installer returned $status. Changes were rolled back; unit left unchanged."
+  echo "Installer returned $status. Read the log for restore status and any retained snapshot."
   echo "Manually POWER OFF, REMOVE the USB, then power on to confirm normal boot."
   echo "=========================================="
 fi

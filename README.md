@@ -109,6 +109,19 @@ running: the UI appends a metrics line to `scope_perf.log` every 2 s
 stability). The last ~20 minutes before insertion are included
 retroactively. Attach that file to any issue.
 
+## Experimental tuner update (not yet a stable release)
+
+The tuner feature from community PR #2 adds a separate **TUNE** screen with
+per-channel note names, cents deviation, a ±3 cent in-tune window, four
+channel selector, and an adjustable A4 reference (400–480 Hz). Reference
+pitch resets to 440 Hz after the UI reloads. The tuner reads raw measured
+frequency from the plugin; it does not change the LV2 port contract.
+
+The experimental `v3f-t1-h1` installer is intended for firmware-407 testing.
+Always keep the separate recovery USB ready. A failed upgrade now restores
+the previous install using a temporary on-device snapshot, but this is not
+a guarantee against power loss during an update.
+
 ## Building from source
 
 Everything ships in this repo: `source/` holds the patched UI
@@ -117,11 +130,14 @@ scope). `build_scope_usb_v2.sh` cross-compiles the plugins (zig + lv2
 headers + llvm-strip) and produces `dist/hector-scope-usb-v2/` (installer)
 and `dist/hector-scope-recovery-usb-v2/` (recovery). The test suites
 (`test_coalesce.py`, `test_scope_installer.py`) cover the wire protocol and
-the full install/rollback state machine. Note: regenerating the
-installer's baseline checksums requires a pristine firmware-407
-`digit_ui` git baseline (not shipped here) — the prebuilt `dist/`
-installer in this repo and in the release assets is ready to flash,
-and the LV2 plugins alone rebuild with their Makefiles.
+the full install/rollback state machine. The original firmware-407 baseline is now bundled in
+`baseline/firmware-407/` with SHA-256 checksums. The build verifies its
+contents, cross-compiles the plugin and regenerates both USB payloads.
+Install Zig, LV2 headers and LLVM strip first; by default the build now
+fails if it cannot cross-compile. Set `ZIG`, `LLVM_STRIP`, `LV2_CPPFLAGS`
+as needed for your machine. Only use `ALLOW_PREBUILT_PLUGIN=1` knowingly;
+it can package an out-of-date plugin. After rebuilding, run
+`python3 test_scope_installer.py` and `python3 test_freq_detector.py`.
 
 Engineering history — how the latency and rendering bottlenecks were found
 and fixed — is documented in `docs/PERF4_CHANGES.md` and
@@ -137,3 +153,31 @@ whole is distributed under the **GPL-3.0**. See `LICENSE`.
 This is a community project, **not affiliated with or endorsed by
 Poly Effects**. Flashing modifies files on your device — the installer is
 checksum-gated and fully reversible, but you use it at your own risk.
+
+
+## Reviewed tuner test packages
+
+The local hardening build is `v3f-t1-h1`.
+It retains the contributor's tuner controls and pitch math.
+Read `HECTOR_TEST_GUIDE.md` before a device test.
+Read `REVIEW_REPORT.md` for the review and proof.
+
+Build and run every test with:
+
+```bash
+python3 -m venv ".venv"
+".venv/bin/python" -m pip install -r "requirements-test.txt"
+LV2_CPPFLAGS="$(pkg-config --cflags lv2)" ".venv/bin/python" "prepare_test_packages.py"
+```
+
+Install Zig, LLVM, LV2 headers and pkg-config first.
+Set `LLVM_STRIP` and `LLVM_READELF` if LLVM is not in PATH or the default Mac location.
+The package command builds the Linux ARM64 plugin from source.
+It targets GLIBC 2.17 and checks the final binary's library requirements.
+It runs the installer, detector, data-path, recovery, USB-entry and Qt UI tests.
+It rejects skipped tests.
+It checks every file inside both ZIPs against its checksum list.
+The ZIPs and their hashes go in `test-artifacts/`.
+The logs and four rendered tuner screens go in `validation/`.
+The Qt UI test uses Qt 6 on the Mac; it does not prove Hector's Qt runtime.
+No step pushes Git changes, merges a PR, publishes a release or flashes a device.

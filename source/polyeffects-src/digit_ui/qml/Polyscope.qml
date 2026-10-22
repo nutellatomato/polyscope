@@ -9,7 +9,7 @@ Item {
     height: 620
 
     property string effect: "scope1"
-    property string scopeBuild: "v3f-t1"   // shown in SETUP so the running build is verifiable
+    property string scopeBuild: "v3f-t1-h1"   // shown in SETUP so the running build is verifiable
     property string uiPage: "main"        // "main" | "setup" | "channel" | "fullscreen" | "tuner"
     property int activeChannel: 0          // 0..3, channel shown on the channel page
     property bool autoTrigger: false       // auto-track the trigger threshold to the SYNC'd channel midpoint
@@ -2270,6 +2270,9 @@ Item {
         }
         Text { x: 230; y: 32; text: "TUNER"; color: "#90E7D0"; font.family: mainFont.name
                font.pixelSize: 26; font.capitalization: Font.AllUppercase }
+        Text { x: 360; y: 34; visible: scopeView.freeze
+               text: "FROZEN · LAST READING"; color: "#FFD166"
+               font.family: mainFont.name; font.pixelSize: 20 }
 
         // reference pitch
         Rectangle {

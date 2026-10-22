@@ -71,7 +71,7 @@ if command -v "$ZIG" >/dev/null 2>&1 && pkg-config --exists lv2 2>/dev/null \
     make clean >/dev/null
     ZIG_GLOBAL_CACHE_DIR="${TMPDIR:-/tmp}/zig-global-cache" \
     ZIG_LOCAL_CACHE_DIR="${TMPDIR:-/tmp}/zig-local-cache" \
-    make UNAME=Linux CC="$ZIG cc -target aarch64-linux-gnu" \
+    make UNAME=Linux CC="$ZIG cc -target aarch64-linux-gnu.2.17" \
          CPPFLAGS="${LV2_CPPFLAGS:-}" \
          STRIP="$LLVM_STRIP" >/dev/null )
   echo "  rebuilt."
@@ -184,7 +184,7 @@ on_error() {
   echo
   echo "=========================================="
   echo "HectorScope install ended with status ${status}."
-  echo "If non-zero, the installer rolled back; the device is unchanged."
+  echo "Read the log for rollback status. Keep the recovery USB ready."
   echo "Log: ${LOG}"
   echo "Safe to power off, REMOVE the USB, then power on."
   echo "=========================================="
@@ -204,7 +204,7 @@ SETTINGS_QML="/home/debian/UI/qml/Settings.qml"
 [ -f "$SETTINGS_QML" ] || { echo "ERROR: $SETTINGS_QML not found. Is this a Hector?"; exit 1; }
 FW="$(sed -n -e 's|.* FIRMWARE \([0-9][0-9]*\).*|\1|p' "$SETTINGS_QML" | head -n 1 || true)"
 case "$FW" in ''|*[!0-9]*) echo "ERROR: could not detect firmware."; exit 1 ;; esac
-[ "$FW" -ge 407 ] || { echo "ERROR: firmware $FW < 407."; exit 1; }
+[ "$FW" -eq 407 ] || { echo "ERROR: this test package requires firmware 407; found $FW."; exit 1; }
 echo "Firmware: $FW"
 
 PATCH="/usb_flash/hector-scope-patch"
@@ -216,7 +216,7 @@ if ! mkdir "$LOCKDIR" 2>/dev/null; then
   echo "Another HectorScope install run is already in progress; exiting to avoid a conflict."
   exit 0
 fi
-trap 'rmdir "$LOCKDIR" 2>/dev/null || true' EXIT
+trap 'if [ "${PERSIST:-0}" = 1 ]; then sync; mount -o remount,ro "$LOWERDIR" 2>/dev/null || true; fi; rmdir "$LOCKDIR" 2>/dev/null || true' EXIT
 
 # --- Detect overlay root and target the PERSISTENT lower layer ---
 # On these units "/" is an overlay whose upper layer is tmpfs (RAM, wiped on
@@ -287,7 +287,7 @@ else
   sync
   remount_ro
   echo "=========================================="
-  echo "Installer returned $status. Changes were rolled back; unit left unchanged."
+  echo "Installer returned $status. Read the log for restore status and any retained snapshot."
   echo "Manually POWER OFF, REMOVE the USB, then power on to confirm normal boot."
   echo "=========================================="
 fi
@@ -298,6 +298,7 @@ chmod 0755 "$OUT/debug.sh"
 # ── 6. Recovery USB (separate folder) ────────────────────────────────
 
 REC="$SCRIPT_DIR/dist/hector-scope-recovery-usb-v2"
+rm -rf "$REC"
 mkdir -p "$REC"
 cat > "$REC/debug.sh" <<'RECEOF'
 #!/bin/bash
@@ -308,13 +309,21 @@ exec > >(tee -a "$LOG") 2>&1
 echo "=== HectorScope recovery $(date -u '+%Y-%m-%dT%H:%M:%SZ') ==="
 [ "$(id -u)" -eq 0 ] || { echo "Must run as root."; exit 1; }
 
+SETTINGS_QML="/home/debian/UI/qml/Settings.qml"
+[ -f "$SETTINGS_QML" ] || { echo "ERROR: $SETTINGS_QML not found. Is this a Hector?"; exit 1; }
+FW="$(sed -n -e 's|.* FIRMWARE \([0-9][0-9]*\).*|\1|p' "$SETTINGS_QML" | head -n 1 || true)"
+case "$FW" in ''|*[!0-9]*) echo "ERROR: could not detect firmware."; exit 1 ;; esac
+[ "$FW" -eq 407 ] || { echo "ERROR: this test package requires firmware 407; found $FW."; exit 1; }
+echo "Firmware: $FW"
+
+
 # Same single-instance guard as the installer.
-LOCKDIR="/tmp/hector_scope_recovery.lock"
+LOCKDIR="/tmp/hector_scope_install.lock"
 if ! mkdir "$LOCKDIR" 2>/dev/null; then
   echo "Another recovery run is already in progress; exiting."
   exit 0
 fi
-trap 'rmdir "$LOCKDIR" 2>/dev/null || true' EXIT
+trap 'if [ "${PERSIST:-0}" = 1 ]; then sync; mount -o remount,ro "$LOWERDIR" 2>/dev/null || true; fi; rmdir "$LOCKDIR" 2>/dev/null || true' EXIT
 
 # Target the persistent lower layer if this is an overlay-root unit.
 LOWERDIR="$(awk '$2=="/" && $3=="overlay"{
@@ -334,55 +343,20 @@ else
 fi
 UI="${TARGET}/home/debian/UI"
 LV2="${TARGET}/usr/lib/lv2"
+export HECTOR_UI_DIR="$UI" HECTOR_LV2_DIR="$LV2"
 remount_ro() { if [ "$PERSIST" = 1 ]; then mount -o remount,ro "$LOWERDIR" 2>/dev/null || true; fi; }
 
-restored_any=0
-
-# 1) Restore from the v2 on-device backups (true originals captured pre-patch).
-B2="$UI/.hector_scope_backup_v2"
-if [ -d "$B2" ]; then
-  ( cd "$B2" && find . -type f ! -name '_lv2_*' | while read -r rel; do
-      rel="${rel#./}"; mkdir -p "$(dirname "$UI/$rel")"; cp -a "$B2/$rel" "$UI/$rel"; echo "restored (v2 backup) $rel"; done )
-  restored_any=1
-fi
-
-# 2) Fall back to the originals stashed on the USB by the installer.
-USB_BAK="/usb_flash/hector_scope_originals_backup"
-if [ "$restored_any" = 0 ] && [ -d "$USB_BAK" ]; then
-  ( cd "$USB_BAK" && find . -type f | while read -r rel; do
-      rel="${rel#./}"; mkdir -p "$(dirname "$UI/$rel")"; cp -a "$USB_BAK/$rel" "$UI/$rel"; echo "restored (USB backup) $rel"; done )
-  restored_any=1
-fi
-
-# 3) Last resort: pristine baseline files carried on this recovery USB.
-ORIG="/usb_flash/originals"
-if [ "$restored_any" = 0 ] && [ -d "$ORIG" ]; then
-  ( cd "$ORIG" && find . -type f | while read -r rel; do
-      rel="${rel#./}"; mkdir -p "$(dirname "$UI/$rel")"; cp -a "$ORIG/$rel" "$UI/$rel"; echo "restored (USB originals) $rel"; done )
-  restored_any=1
-fi
-
-# Remove scope additions and the marker.
-rm -f "$UI/qml/Scope.qml" 2>/dev/null && echo "removed Scope.qml" || true
-rm -f "$UI/qml/Polyscope.qml" 2>/dev/null && echo "removed Polyscope.qml" || true
-rm -rf "$LV2/poly_scope.lv2" 2>/dev/null && echo "removed LV2 bundle" || true
-rm -rf "$LV2/poly_scope2.lv2" 2>/dev/null && echo "removed LV2 bundle 2" || true
-rm -f "$UI/.hector_scope_v2_done" 2>/dev/null || true
-
-# Regenerate module_info.js from whatever module_info.py is now in place.
-if [ -f "$UI/effect_proto_to_js.py" ]; then ( cd "$UI" && python3 effect_proto_to_js.py 2>/dev/null ) || true; fi
-
+set +e
+python3 /usb_flash/recover_scope.py
+status=$?
+set -e
 sync
 remount_ro
-echo "=========================================="
-if [ "$restored_any" = 1 ]; then
-  echo "Recovery complete. Original files restored on the persistent layer."
-else
-  echo "Recovery ran, but no backup source was found to restore from."
-  echo "If the unit still misbehaves, reflash firmware 407."
+if [ "$status" -ne 0 ]; then
+  echo "RECOVERY FAILED. Read $LOG. Do not assume the unit is restored."
+  exit "$status"
 fi
-echo "Manually POWER OFF the unit, REMOVE the USB, then power on."
-echo "=========================================="
+echo "Recovery verified. POWER OFF, REMOVE the USB, then power on."
 shutdown -h now 2>/dev/null || poweroff 2>/dev/null || true
 RECEOF
 chmod 0755 "$REC/debug.sh"
@@ -394,7 +368,13 @@ mkdir -p "$REC/originals/qml"
 for f in module_info.py show_widget.py ingen_wrapper.py headless.py qml/PatchBayEffect.qml; do
   cp "$BASELINE_DIR/$f" "$REC/originals/$f"
 done
-echo "  staged pristine originals on recovery USB"
+cp "$SCRIPT_DIR/install_scope.py" "$REC/install_scope.py"
+cp "$SCRIPT_DIR/recover_scope.py" "$REC/recover_scope.py"
+cp "$PAY/manifest.json" "$REC/recovery-manifest.json"
+echo "  staged verified recovery engine and pristine originals"
+
+cp "$SCRIPT_DIR/HECTOR_TEST_GUIDE.md" "$OUT/HECTOR_TEST_GUIDE.md"
+cp "$SCRIPT_DIR/HECTOR_TEST_GUIDE.md" "$REC/HECTOR_TEST_GUIDE.md"
 
 # ── 7. README + checksums ────────────────────────────────────────────
 
@@ -402,7 +382,11 @@ cat > "$OUT/README_USB_INSTALL.txt" <<'README'
 HectorScope USB Installer v2 (checksum-gated)
 =============================================
 
-This installer is safe for fragile units that cannot be recovered by hand:
+Experimental v3f-t1-h1 test package for Hector firmware 407.
+Back up patches and prepare a separate recovery USB before use.
+Power-loss recovery and physical Hector operation are not yet verified.
+
+Checks:
 
   * PERSISTENCE: these units use an overlay root whose writable layer is in RAM
     and is wiped on every reboot, with the real storage mounted read-only
@@ -415,11 +399,11 @@ This installer is safe for fragile units that cannot be recovered by hand:
     checksums it saw (in the log) so the package can be re-targeted.
   * Every replaced file is backed up (on the persistent layer AND copied to the
     USB at hector_scope_originals_backup/), every write is checksum-verified,
-    and the patched Python is compile-checked. If anything fails, ALL changes
-    are rolled back and the unit is left exactly as it was.
+    and the patched Python is compile-checked. Failed installs attempt to restore the prior state.
+    Read the log: a failed restore retains its snapshot for recovery.
   * Because writes are now permanent, recover with the recovery USB if needed;
-    it restores from the on-device backup, the USB backup, or pristine baseline
-    originals it carries.
+    it checks and restores the full firmware-407 baseline
+    it carries. It aborts if a file is corrupt or metadata generation fails.
 
 USB layout (copy everything to a FAT32 USB root):
   debug.sh
@@ -439,11 +423,11 @@ Install:
   2. Insert the USB drive. THE INSTALLER RUNS AUTOMATICALLY -- no menu
      interaction is needed. (Fallback if nothing happens within ~30s:
      Settings -> QA CHECK -> Run debug, pressed ONCE.)
-  3. The unit REBOOTS ITSELF when the install finishes.
+  3. The script requests shutdown. If it stays on, power it off by hand.
   4. IMPORTANT: the moment the screen goes black (reboot starting),
      REMOVE THE USB STICK. If it stays inserted, the unit re-runs the
      installer on every boot and looks stuck in an update/reboot loop.
-     Nothing is damaged -- just remove the stick and let it boot.
+     Remove the stick before the next boot.
   5. Add a "scope" module in the patch bay.
 
 Note: the installer takes only a few seconds. It uses a lock so that even if
@@ -451,18 +435,25 @@ the runner launches it more than once, only one instance runs and the rest
 exit immediately. A completion marker makes repeat launches a no-op.
 
 If it reports a checksum mismatch and aborts:
-  Your unit is untouched. Copy /usb_flash/hector_scope_install.log off the USB
+  Read the restore status. Copy /usb_flash/hector_scope_install.log off the USB
   and share it so the package can be re-targeted for your exact firmware.
 
 Recovery (separate USB: hector-scope-recovery-usb-v2):
-  Same handling: insert the stick, it runs automatically, and the unit
-  reboots. Remove the stick as soon as the screen goes black. Restores the
-  backups and removes the plugin.
+  Same handling: insert the stick, it runs automatically, then requests shutdown. Remove the stick as soon as the screen goes black. Restores the
+  verified firmware-407 files and removes the plugin. Your patches stay in place.
 README
 
 ( cd "$OUT"
   if command -v shasum >/dev/null 2>&1; then
     find . -type f ! -name SHA256SUMS ! -name '.DS_Store' | sort | xargs shasum -a 256 > SHA256SUMS
+  else
+    find . -type f ! -name SHA256SUMS ! -name '.DS_Store' | sort | xargs sha256sum > SHA256SUMS
+  fi )
+( cd "$REC"
+  if command -v shasum >/dev/null 2>&1; then
+    find . -type f ! -name SHA256SUMS | sort | xargs shasum -a 256 > SHA256SUMS
+  else
+    find . -type f ! -name SHA256SUMS | sort | xargs sha256sum > SHA256SUMS
   fi )
 
 echo
@@ -471,5 +462,5 @@ echo "Install USB : $OUT/"
 echo "Recovery USB: $REC/"
 echo
 echo "Copy the CONTENTS of the install folder to a FAT32 USB root,"
-echo "then insert into a booted Hector: it installs automatically and reboots."
+echo "then insert into a booted Hector: it installs automatically and requests shutdown."
 echo "Remove the stick the moment the screen goes black, or it will loop."

@@ -123,7 +123,8 @@ typedef struct {
 } Result;
 
 static Result
-run_case(Wave w, double hz, float amplitude, float dc, float noise_amp, float smooth)
+run_case(Wave w, double hz, float amplitude, float dc, float noise_amp, float smooth,
+         double settle_seconds, double measure_seconds)
 {
 	LV2_URID_Map map = {NULL, map_uri};
 	LV2_Feature map_feature = {LV2_URID__map, &map};
@@ -158,8 +159,8 @@ run_case(Wave w, double hz, float amplitude, float dc, float noise_amp, float sm
 	const double phase_step = hz / TEST_RATE;
 	double phase = 0.137;
 	float lp = 0.0f;
-	const uint64_t settle = (uint64_t)(TEST_SETTLE_S * TEST_RATE);
-	const uint64_t total = settle + (uint64_t)(TEST_MEASURE_S * TEST_RATE);
+	const uint64_t settle = (uint64_t)(settle_seconds * TEST_RATE);
+	const uint64_t total = settle + (uint64_t)(measure_seconds * TEST_RATE);
 	uint64_t n = 0;
 
 	while (n < total) {
@@ -260,6 +261,37 @@ note_change_ms(double from_hz, double to_hz)
 	return settled_at;
 }
 
+static bool
+slow_startup_and_timeout(double hz)
+{
+    FreqDetector det;
+    freq_detector_reset(&det);
+    const float coeff = (float)(1.0 - exp(-1.0 / (SCOPE_FREQ_ENV_DECAY_S * TEST_RATE)));
+    const double timeout = SCOPE_FREQ_TIMEOUT_S * TEST_RATE;
+    const double window = SCOPE_FREQ_WINDOW_S * TEST_RATE;
+    double first = -1.0;
+    double first_error = 0.0;
+    const uint64_t end = (uint64_t)(4.0 * TEST_RATE / hz);
+    for (uint64_t n = 0; n < end; ++n) {
+        float v = (float)(0.5 * sin(6.283185307179586 * (0.137 + hz * n / TEST_RATE)));
+        freq_detector_push(&det, v, n, coeff, window, timeout);
+        double f = freq_detector_hz(&det, n, TEST_RATE, timeout);
+        if (f > 0.0 && first < 0.0) {
+            first = n / TEST_RATE;
+            first_error = fabs(cents(f, hz));
+        }
+    }
+    for (uint64_t n = end; n < end + (uint64_t)(2.1 * TEST_RATE); ++n) {
+        freq_detector_push(&det, 0.0f, n, coeff, window, timeout);
+    }
+    const bool stopped = freq_detector_hz(&det, end + 2.1 * TEST_RATE, TEST_RATE, timeout) == 0.0;
+    /* First-cycle LFO readout: within two cycles and two percent; settled test is stricter. */
+    const bool ok = first > 0.0 && first < 2.0 / hz && first_error < 34.0 && stopped;
+    printf("slow startup %.1f Hz: first %.3f s, %.3f cents, silence clears %s %s\n",
+           hz, first, first_error, stopped ? "yes" : "NO", ok ? "" : "FAIL");
+    return ok;
+}
+
 int
 main(void)
 {
@@ -283,7 +315,7 @@ main(void)
 		for (int c = 0; c < n_conds; ++c) {
 			for (int p = 0; p < n_pitches; ++p) {
 				const Result r = run_case((Wave)w, pitches[p], conds[c].amp, conds[c].dc,
-				                          conds[c].noise, conds[c].smooth);
+				                          conds[c].noise, conds[c].smooth, TEST_SETTLE_S, TEST_MEASURE_S);
 				const bool ok = r.packets > 0 && r.max_cents <= conds[c].limit;
 				if (!ok) {
 					failures += 1;
@@ -293,6 +325,18 @@ main(void)
 				       ok ? "" : "FAIL");
 			}
 		}
+	}
+
+	/* Slow CV/LFOs must produce a useful reading without four cycles. */
+	const double slow_hz[] = {1.0, 2.0, 5.0, 10.0};
+	for (int i = 0; i < 4; ++i) {
+		if (!slow_startup_and_timeout(slow_hz[i])) failures++;
+		/* The decaying midpoint needs three 1-Hz cycles to settle below 1 cent. */
+		const Result r = run_case(W_SINE, slow_hz[i], 0.5f, 0.0f, 0.0f, 0.6f, 3.3, 2.0);
+		const bool ok = r.packets > 0 && r.max_cents < 1.0;
+		if (!ok) failures++;
+		printf("slow LFO %.1f Hz: %.3f cents %s\n", slow_hz[i], r.max_cents,
+		       ok ? "" : "FAIL");
 	}
 
 	const double steps[][2] = {{440.0, 466.16}, {110.0, 220.0}, {880.0, 440.0}, {55.0, 61.74}};
