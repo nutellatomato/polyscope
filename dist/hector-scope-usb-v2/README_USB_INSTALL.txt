@@ -1,9 +1,10 @@
 HectorScope USB Installer v2 (checksum-gated)
 =============================================
 
-Experimental v3f-t1-h1 test package for Hector firmware 407.
+Polyscope v3f-t1-h1 repository build for Hector firmware 407.
 Back up patches and prepare a separate recovery USB before use.
-Power-loss recovery and physical Hector operation are not yet verified.
+The owner reported successful Hector use on 2026-10-22.
+Hardware recovery and power-loss recovery remain untested.
 
 Checks:
 

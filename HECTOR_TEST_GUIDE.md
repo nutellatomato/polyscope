@@ -1,18 +1,21 @@
 # Hector firmware-407 test
 
-This is an experimental test build: `v3f-t1-h1`.
-No physical Hector test has run here.
+Current repository build: `v3f-t1-h1`, for Hector firmware 407.
+The owner reported successful use on their Hector on 2026-10-22.
+See `docs/HARDWARE_VALIDATION.json` for the exact scope and runtime hashes.
+No per-case hardware measurements or recovery test results were supplied.
+No tuner release has been published yet.
 Keep a separate, known-working recovery USB.
 Back up your patches first.
 Do not use this build on another firmware version.
 
 1. Confirm firmware **407** on Hector.
-2. Verify the downloaded ZIP hashes against `test-artifacts/SHA256SUMS`.
-3. Extract `Polyscope-USB-recovery-v3f-t1-h1-review.zip`.
-4. Copy its contents to the root of a separate FAT32 USB stick.
+2. Download and extract the main branch ZIP, or use a checked source build.
+3. Open `dist/hector-scope-recovery-usb-v2/`.
+4. Copy all its contents to the root of a separate FAT32 USB stick.
 5. Keep that recovery stick out of Hector during the install test.
-6. Extract `Polyscope-USB-installer-v3f-t1-h1-review.zip`.
-7. Copy its contents to the root of another FAT32 USB stick.
+6. Open `dist/hector-scope-usb-v2/`.
+7. Copy all its contents to the root of another FAT32 USB stick.
 8. Boot Hector and insert the installer stick.
 9. If no install starts, use Settings -> QA CHECK -> Run debug once.
 10. Read the result on the screen.
@@ -21,7 +24,8 @@ Do not use this build on another firmware version.
 13. Remove the USB before you power Hector on.
 14. Add a scope module and check `v3f-t1-h1` in SETUP.
 
-Test each item and record pass or fail:
+For a new device check, test each item and record pass or fail.
+The owner's general success report does not mark each item below as tested:
 
 - Boot after a full power cycle.
 - Scope input and output on all four channels.
@@ -58,6 +62,11 @@ It restores the pre-recovery state if a normal recovery step fails.
 An incomplete restore keeps its `.polyscope-upgrade-*` folder beside the UI.
 Do not remove that folder if a restore failed.
 Power-loss recovery and recovery from a device that cannot start USB debug remain untested.
+
+For locally built installer/recovery ZIPs, extract each ZIP directly to its USB root.
+The ZIP already has `debug.sh` at the top level.
+Check local ZIP hashes against `test-artifacts/SHA256SUMS`.
+Each copied folder has its own `SHA256SUMS` for file checks.
 
 Keep `/usb_flash/hector_scope_install.log` from the installer stick.
 Keep `/usb_flash/hector_scope_recovery.log` from the recovery stick.

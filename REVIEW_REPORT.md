@@ -1,10 +1,13 @@
 # Polyscope tuner review — 2026-10-22
 
-The fixes are on the local branch `codex/tuner-hardening`.
-The test build is `v3f-t1-h1`.
-No changes were pushed or merged.
-No release was published.
-No physical Hector was flashed or tested.
+The integration build is `v3f-t1-h1`.
+The initial review and host tests ran before the device test.
+The owner then installed the verified FAT USB build and reported on 2026-10-22
+that it works perfectly on their machine.
+See [the owner-report record](docs/HARDWARE_VALIDATION.json) for the runtime hashes.
+This is an owner report; no per-case measurements were supplied.
+Recovery and power-loss behavior have not been confirmed on hardware.
+No tuner release has been published.
 
 ## Review source
 
@@ -44,17 +47,17 @@ The carried firmware-407 baseline remains unchanged.
 
 ## Proof
 
-Run from `/Users/nepanduke/Documents/CODEX REPO/Polyscope`:
+Run from the repository root:
 
 ```bash
-LV2_CPPFLAGS='-I/opt/homebrew/Cellar/lv2/1.18.10/include' '.venv/bin/python' 'prepare_test_packages.py'
+LV2_CPPFLAGS="$(pkg-config --cflags lv2)" ".venv/bin/python" "prepare_test_packages.py"
 ```
 
-Final full-suite output:
+Current integration full-suite output:
 
 ```text
-55 passed, 10 warnings
-VERIFIED: 55 tests, zero skips; ARM64 ELF; GLIBC <= 2.17; two ZIPs verified
+58 passed, 10 warnings
+VERIFIED: 58 tests, zero skips; ARM64 ELF; GLIBC <= 2.17; two ZIPs verified
 ```
 
 The direct installer suite reports `RESULTS: 51 passed, 0 failed`.
@@ -96,12 +99,12 @@ The baseline bytes stay intact so its checksum checks remain valid.
 Use the installer and recovery ZIPs in `test-artifacts/`.
 Each ZIP has `BUILD_PROVENANCE.json` with source hashes and a plugin hash.
 The outer `SHA256SUMS` identifies the final ZIPs.
-Read `HECTOR_TEST_GUIDE.md` and test on a Hector running firmware 407.
+Read `HECTOR_TEST_GUIDE.md` before another installation or device check.
 Prepare the recovery stick before the test stick.
 
-The host checks do not prove the ARM64 plugin loads on Hector.
-The Qt 6 render does not prove Hector's Qt runtime.
+The owner confirms successful use of the installed build on their Hector.
+The host checks and Qt 6 render remain separate test evidence.
 Power loss during a write and a device that cannot start USB debug remain untested.
 The recovery package restores the firmware-407 UI baseline; it is not a full firmware image.
 Keep the known-working firmware recovery path available.
-Main and release publication stay unchanged until the hardware results are reviewed.
+The integration is submitted through pull requests. Release publication remains a separate step.

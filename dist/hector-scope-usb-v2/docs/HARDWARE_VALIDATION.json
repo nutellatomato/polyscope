@@ -1,0 +1,26 @@
+{
+  "build": "v3f-t1-h1",
+  "reported_on": "2026-10-22",
+  "device": "Poly Effects Hector",
+  "target_firmware": 407,
+  "reporter": "repository owner",
+  "result": "Owner reports the installed build works perfectly on their machine.",
+  "verification": "Owner report after installation from the verified FAT USB; no per-case measurements supplied.",
+  "recovery_hardware_tested": false,
+  "power_loss_tested": false,
+  "tested_installer_files": {
+    "debug.sh": "f859d173e178bc526ba6d79ad0c2accd4b140b88361ed5292294aa847573f9bc",
+    "hector-scope-patch/install_scope.py": "efe9a11c60b0453e1448fa3c0f326d47106e31b0f8b6c1c73d8b545b239080cb",
+    "hector-scope-patch/payload/manifest.json": "a66c75b85d9eb3a357f9ed939a43cdd6e88493195070f419adf71cb94b8b3e3f",
+    "hector-scope-patch/payload/files/module_info.py": "57caf158ab001a9886ea92ce076b88e83863d26d5dd6bb8014a24cd45aa20e33",
+    "hector-scope-patch/payload/files/show_widget.py": "4aad1f24306187e26c386fd4393c9cf1658200d1220b55dc8e587327cf8bfde3",
+    "hector-scope-patch/payload/files/ingen_wrapper.py": "9b25ecf85d90bc82b09079cdaabbfa89183656a75c8a13b7a473cd1e32c8bfd0",
+    "hector-scope-patch/payload/files/qml/PatchBayEffect.qml": "67fa6b23c5b50101cbb1bc3b0280022996141b54a6edee641e2939d435f9ca12",
+    "hector-scope-patch/payload/files/headless.py": "8c702411b4f3c792ba7eb424285cde71ab49e9abaac894bb0c6f315ad08c3194",
+    "hector-scope-patch/payload/files/qml/Polyscope.qml": "6e09e0c596f5646ccc312ca19457b7f2bc2404cd9dfbff5e906bb4803181b049",
+    "hector-scope-patch/payload/files/scope_util.py": "1012ea29bbd89948669aaeba8dd98c024bdbbeb58c1d16fcceda903a4a41ada8",
+    "hector-scope-patch/payload/lv2/poly_scope2.lv2/poly_scope2.so": "50f2154288c19b9af5c5f70256b2d1fa974f0297baea0dd1cc6feb3735bf6ae5",
+    "hector-scope-patch/payload/lv2/poly_scope2.lv2/poly_scope2.ttl": "4354f7fa9fff08e61b780251399833247de2c3a94354ae8e877a45f5da227894",
+    "hector-scope-patch/payload/lv2/poly_scope2.lv2/manifest.ttl": "4146624773ebc2d276ef3dfd991f0132ba401e39f6ef6fb5c063af9a3eff8740"
+  }
+}

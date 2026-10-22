@@ -8,8 +8,7 @@ set -euo pipefail
 #
 # The installer replaces firmware-407 UI files with verified-complete
 # patched versions ONLY when their checksums match the known 407 baseline,
-# backs everything up, verifies every write, compile-checks the result, and
-# rolls back completely on any failure.
+# backs up managed files, verifies writes, and attempts full restore on failure.
 #
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -375,6 +374,12 @@ echo "  staged verified recovery engine and pristine originals"
 
 cp "$SCRIPT_DIR/HECTOR_TEST_GUIDE.md" "$OUT/HECTOR_TEST_GUIDE.md"
 cp "$SCRIPT_DIR/HECTOR_TEST_GUIDE.md" "$REC/HECTOR_TEST_GUIDE.md"
+for DEST in "$OUT" "$REC"; do
+  mkdir -p "$DEST/docs"
+  cp "$SCRIPT_DIR/docs/HARDWARE_VALIDATION.json" "$DEST/docs/HARDWARE_VALIDATION.json"
+  cp "$SCRIPT_DIR/docs/TUNER_INTEGRATION.md" "$DEST/docs/TUNER_INTEGRATION.md"
+  cp "$SCRIPT_DIR/REVIEW_REPORT.md" "$DEST/REVIEW_REPORT.md"
+done
 
 # ── 7. README + checksums ────────────────────────────────────────────
 
@@ -382,9 +387,10 @@ cat > "$OUT/README_USB_INSTALL.txt" <<'README'
 HectorScope USB Installer v2 (checksum-gated)
 =============================================
 
-Experimental v3f-t1-h1 test package for Hector firmware 407.
+Polyscope v3f-t1-h1 repository build for Hector firmware 407.
 Back up patches and prepare a separate recovery USB before use.
-Power-loss recovery and physical Hector operation are not yet verified.
+The owner reported successful Hector use on 2026-10-22.
+Hardware recovery and power-loss recovery remain untested.
 
 Checks:
 

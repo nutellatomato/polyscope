@@ -1,183 +1,151 @@
 # Polyscope
 
-A four-channel digital oscilloscope for the **Poly Effects Hector** eurorack
-module. Community firmware patch: a custom full-screen scope UI, a new LV2
-scope plugin, and a checksum-gated USB installer with full backup/recovery.
+A four-channel oscilloscope and tuner for the **Poly Effects Hector**.
+This community patch adds a full-screen UI and an LV2 plugin.
+An LV2 plugin is the part that measures and passes the signals through Hector.
 
-> Formerly *HectorScope*. Renamed to match the module's on-device name
-> (`polyscope`, shown on the SETUP page). Old GitHub links redirect
-> automatically.
+**Current repository build: `v3f-t1-h1`.** The owner confirmed that this build
+works on their Hector on 22 October 2026. It targets **firmware 407**.
+The source, ARM64 plugin, installer and recovery files are included here.
+No tuner release has been published yet. The last published release is
+[`v2.0.0`](https://github.com/nutellatomato/polyscope/releases/tag/v2.0.0),
+with on-device tag `v3f`; that release does not include the tuner.
 
-> **Current stable: `v2.0.0`** (on-device build tag `v3f`) — grab the
-> installer from the GitHub release assets. Previous fallbacks: `v1.2.0-perf8`,
-> `v1.1-perf7-stable`. See [CHANGELOG.md](CHANGELOG.md) for what's new.
+Formerly called *HectorScope*. The old folder names remain in the installer.
+See [CHANGELOG.md](CHANGELOG.md) for the build history.
 
 ## Features
 
-- **4 input channels** with direct thru outputs (patch signals through the
-  scope without losing them)
-- **Views:** per-channel STACK, combined OVERLAY, and XY (CH1/2 or CH3/4)
-  with live correlation readout
-- **Timebase** 0.5–100 ms/div · **Scale** 0.5–10 V/div · per-channel
-  **AC/DC coupling** and visibility
-- **Triggering:** AUTO / RISE / FALL / **ROLL** (free-running right-to-left
-  scroll — the best view for slow CV and evolving signals), adjustable level
-  with optional auto-tracking, per-channel sync source, and **trigger
-  holdoff** (1–500 ms) for locking onto complex, multi-edge waveforms
-- **HF DETAIL anti-alias envelope:** under-sampled high-frequency content is
-  drawn as an honest min/max band (recorded at full sample rate in the
-  plugin) instead of a misleading aliased waveform
-- **Alias-free measurements:** frequency is measured in the plugin from the
-  raw full-rate signal; per-channel pp / rms / min / max / period readouts
-- **Persistence** (5 levels) with afterglow envelope, **intensity** control,
-  **measurement cursors** (fullscreen), **AUTOSET**, **FREEZE/RUN**, and a
-  fullscreen trace viewer (tap the trace)
-- **12-bit trace resolution** (4096 amplitude steps — visibly smoother
-  slow CV at high zoom) at zero extra bandwidth
-- Engineered for responsiveness on the Hector's CPU: threaded trace
-  rendering, layered static/dynamic canvases, bulk socket ingest, and a
-  constant-memory frame path — no growing stutter, no matter how long the
-  session runs
+- Four inputs with direct thru outputs.
+- STACK, OVERLAY and XY views, with an XY correlation readout.
+- Timebase from 0.5 to 100 ms/div and scale from 0.5 to 10 V/div.
+- Per-channel AC/DC coupling and visibility.
+- AUTO, RISE, FALL and ROLL trigger modes, with adjustable trigger level,
+  auto-level tracking, sync source and 1–500 ms trigger holdoff.
+- HF DETAIL: a min/max envelope shows fast signals that the trace cannot resolve.
+- Frequency, peak-to-peak, RMS, minimum, maximum and period readouts.
+- Persistence, intensity, fullscreen cursors, AUTOSET and FREEZE/RUN.
+- 12-bit traces with 4,096 amplitude steps.
+- A full-screen **TUNE** page with four channel readings, note names,
+  a ±50-cent meter and a green ±3-cent in-tune zone.
+- Adjustable A4 reference from 400 to 480 Hz in 1 Hz steps.
+- A frequency detector that handles DC offsets and measures between samples.
 
-## Requirements
+## Install the current repository build
 
-- Poly Effects **Hector** on **firmware 407** — the installer verifies every
-  file against the 407 baseline checksums and refuses to touch anything
-  else, so a mismatched firmware aborts cleanly before any change
-- A **FAT32 USB stick**
+Use a Hector on **firmware 407** and a FAT32 USB stick.
+Back up your patches and prepare a separate recovery stick first.
 
-## Install
+1. [Download the main branch ZIP](https://github.com/nutellatomato/polyscope/archive/refs/heads/main.zip) and extract it.
+2. Open `dist/hector-scope-usb-v2/`.
+3. Copy **all contents of that folder** to the USB root.
+   `debug.sh` and `hector-scope-patch/` must sit at the top level.
+4. Boot Hector normally and insert the stick.
+5. If it does not start within about 30 seconds, select
+   Settings → QA CHECK → Run debug once.
+6. Read the result. The script requests shutdown after success.
+7. Remove the USB when the screen goes black or Hector shuts down.
+   If Hector stays on after success, power it off by hand.
+8. Remove the USB before the next boot.
+9. Add a scope module. Open SETUP and check **polyscope v3f-t1-h1**.
 
-1. Download `Polyscope-USB-installer-…zip` from the latest release and
-   unzip it.
-2. Copy the **contents** of `hector-scope-usb-v2/` to the **root** of a
-   FAT32 USB stick (so `debug.sh` and `hector-scope-patch/` sit at the top
-   level).
-3. Boot Hector normally, then insert the stick. **The installer runs
-   automatically** — no menu interaction needed. (Fallback if nothing
-   happens within ~30 s: Settings → QA CHECK → Run debug, pressed once.)
-4. The module **reboots itself** when the install finishes.
-5. ⚠️ **The moment the screen goes black, remove the USB stick.** If it
-   stays inserted, the module re-runs the installer on every boot and looks
-   stuck in an update/reboot loop. Nothing is damaged — remove the stick
-   and let it boot normally.
-6. Verify: open the scope module, go to **SETUP** — the footer must read
-   **polyscope v3f**.
+Keep the UI and plugin from the same package together.
+The installer checks the staged files before it changes the device.
+It checks the expected firmware files, saves their old state, and checks each write.
+If a normal install step fails, it attempts to restore the old state.
+Read the log if it reports an error. An incomplete restore retains its snapshot.
+Sudden power loss during an update is not covered by those checks.
 
-The installer backs up every original file on the device *and* onto the USB
-stick before changing anything, verifies every write, and rolls back
-completely on any failure.
+See the [install, test and recovery guide](HECTOR_TEST_GUIDE.md) for details.
+The full owner-report record is in [docs/HARDWARE_VALIDATION.json](docs/HARDWARE_VALIDATION.json).
 
-### Uninstall / recovery
+### Recovery
 
-- The release also ships a **recovery USB** zip: prepare a stick the same
-  way and insert it — it runs automatically, restores the pristine
-  firmware-407 files from any state, and reboots. Same rule: remove the
-  stick as soon as the screen goes black.
-- The install stick keeps a copy of the original files under
-  `hector_scope_originals_backup/` as an extra safety net.
+Prepare another FAT32 stick with the contents of
+`dist/hector-scope-recovery-usb-v2/` at its root.
+Use it as described in the [recovery guide](HECTOR_TEST_GUIDE.md).
+
+Recovery checks and restores the five carried firmware-407 UI files,
+rebuilds the module list, and removes the scope additions.
+It leaves user patches in place.
+It is **not a full firmware image** and needs Hector's USB debug runner to work.
+Hardware recovery and power-loss recovery have not been confirmed by the owner report.
+
+The install stick also keeps original files in `hector_scope_originals_backup/`.
+Keep that folder and the install and recovery logs.
 
 ## Mini manual
 
-**Main page** — trace area (tap it for fullscreen), bottom bar with
-RUN/FREEZE, CLEAR, TIME −/+, SCALE −/+, view selector (STACK / OVR / XY12 /
-XY34) and SETUP. Right column: per-channel ON, SYNC (trigger source) and
-OPTIONS (coupling, stats).
+**Main page:** tap a trace for fullscreen. Use the bottom bar for
+RUN/FREEZE, CLEAR, TIME, SCALE, the view selector, TUNE and SETUP.
+Use the right column for channel ON, SYNC and OPTIONS.
 
-**SETUP page** — trigger mode/source/level (with AUTO level tracking),
-**TRIGGER HOLDOFF** in ms (OFF = classic trigger; set just below your
-pattern's repeat period to lock complex waveforms), persistence, intensity,
-**HF DETAIL** on/off, AUTOSET, and the build tag.
+**TUNE:** tap a channel in the right column to make it the main reading.
+The note, meter and border turn green within ±3 cents.
+Use A4 minus or plus to change the reference. Double-tap the reference to reset
+it to 440 Hz. It also resets to 440 Hz when the UI reloads.
+FREEZE holds the last reading and shows a yellow label. RUN resumes measurement.
+The tuner shows musical notes from 16 to 8,000 Hz. Slower LFOs still have a
+scope frequency readout; allow about three cycles for a 1-Hz signal to settle.
 
-**Reading tips**
+**SETUP:** select trigger mode, source and level, trigger holdoff,
+persistence, intensity, HF DETAIL and AUTOSET. The footer shows the build tag.
 
-- Fast audio on a slow timebase? The dim band around the trace is the
-  **HF envelope** — the true amplitude of content too fast for the point
-  trace. The Hz readout stays correct regardless (measured at full rate).
-- Watching sequences, LFOs, envelopes evolve? Use **ROLL** trigger mode —
-  the trace streams right-to-left continuously.
-- Jumpy display on a complex repeating waveform? Raise **HOLDOFF** until it
-  locks. Keep it OFF for simple periodic signals.
-- **Cursors** live in the fullscreen view (CURSORS button, drag A/B for
-  Δt / ΔV / frequency readouts).
+**Reading tips:** use ROLL for slow CV. Raise HOLDOFF to lock onto a complex
+repeating signal. Use fullscreen cursors for time and voltage differences.
+The dim HF envelope shows fast content that is too quick for the point trace.
 
-## Performance logging (for bug reports)
+## Build and check
 
-Insert a FAT32 USB stick **without** `debug.sh` on it while the scope is
-running: the UI appends a metrics line to `scope_perf.log` every 2 s
-(receive rate, painted fps, queue depths, worst-case loop times, trigger
-stability). The last ~20 minutes before insertion are included
-retroactively. Attach that file to any issue.
-
-## Experimental tuner update (not yet a stable release)
-
-The tuner feature from community PR #2 adds a separate **TUNE** screen with
-per-channel note names, cents deviation, a ±3 cent in-tune window, four
-channel selector, and an adjustable A4 reference (400–480 Hz). Reference
-pitch resets to 440 Hz after the UI reloads. The tuner reads raw measured
-frequency from the plugin; it does not change the LV2 port contract.
-
-The experimental `v3f-t1-h1` installer is intended for firmware-407 testing.
-Always keep the separate recovery USB ready. A failed upgrade now restores
-the previous install using a temporary on-device snapshot, but this is not
-a guarantee against power loss during an update.
-
-## Building from source
-
-Everything ships in this repo: `source/` holds the patched UI
-(`digit_ui/`) and the LV2 plugins (`PolyLV2/poly_scope2.lv2` is the active
-scope). `build_scope_usb_v2.sh` cross-compiles the plugins (zig + lv2
-headers + llvm-strip) and produces `dist/hector-scope-usb-v2/` (installer)
-and `dist/hector-scope-recovery-usb-v2/` (recovery). The test suites
-(`test_coalesce.py`, `test_scope_installer.py`) cover the wire protocol and
-the full install/rollback state machine. The original firmware-407 baseline is now bundled in
-`baseline/firmware-407/` with SHA-256 checksums. The build verifies its
-contents, cross-compiles the plugin and regenerates both USB payloads.
-Install Zig, LV2 headers and LLVM strip first; by default the build now
-fails if it cannot cross-compile. Set `ZIG`, `LLVM_STRIP`, `LV2_CPPFLAGS`
-as needed for your machine. Only use `ALLOW_PREBUILT_PLUGIN=1` knowingly;
-it can package an out-of-date plugin. After rebuilding, run
-`python3 test_scope_installer.py` and `python3 test_freq_detector.py`.
-
-Engineering history — how the latency and rendering bottlenecks were found
-and fixed — is documented in `docs/PERF4_CHANGES.md` and
-`docs/PERF5_CHANGES.md`.
-
-## License, attribution, disclaimer
-
-This project modifies and redistributes source from **Poly Effects**
-(`digit_ui`, `ingen` fork) under their open-source licenses; the scope LV2
-plugins are original work licensed **GPL-2.0-or-later**; the patch set as a
-whole is distributed under the **GPL-3.0**. See `LICENSE`.
-
-This is a community project, **not affiliated with or endorsed by
-Poly Effects**. Flashing modifies files on your device — the installer is
-checksum-gated and fully reversible, but you use it at your own risk.
-
-
-## Reviewed tuner test packages
-
-The local hardening build is `v3f-t1-h1`.
-It retains the contributor's tuner controls and pitch math.
-Read `HECTOR_TEST_GUIDE.md` before a device test.
-Read `REVIEW_REPORT.md` for the review and proof.
-
-Build and run every test with:
+The firmware-407 baseline is included in `baseline/firmware-407/`.
+The build checks its hashes before use.
+Install Git, Python 3, make, pkg-config, Zig, LLVM and LV2 headers first.
+On a Mac with Homebrew:
 
 ```bash
+brew install git python pkg-config zig llvm lv2
 python3 -m venv ".venv"
 ".venv/bin/python" -m pip install -r "requirements-test.txt"
+export LLVM_STRIP="$(brew --prefix llvm)/bin/llvm-strip"
+export LLVM_READELF="$(brew --prefix llvm)/bin/llvm-readelf"
 LV2_CPPFLAGS="$(pkg-config --cflags lv2)" ".venv/bin/python" "prepare_test_packages.py"
 ```
 
-Install Zig, LLVM, LV2 headers and pkg-config first.
-Set `LLVM_STRIP` and `LLVM_READELF` if LLVM is not in PATH or the default Mac location.
-The package command builds the Linux ARM64 plugin from source.
-It targets GLIBC 2.17 and checks the final binary's library requirements.
-It runs the installer, detector, data-path, recovery, USB-entry and Qt UI tests.
-It rejects skipped tests.
-It checks every file inside both ZIPs against its checksum list.
-The ZIPs and their hashes go in `test-artifacts/`.
-The logs and four rendered tuner screens go in `validation/`.
-The Qt UI test uses Qt 6 on the Mac; it does not prove Hector's Qt runtime.
-No step pushes Git changes, merges a PR, publishes a release or flashes a device.
+On another host, put `llvm-strip` and `llvm-readelf` in PATH, or set
+`LLVM_STRIP` and `LLVM_READELF` to their exact paths.
+Set `ZIG` or `LV2_CPPFLAGS` if the tools or headers need another path.
+The target is Linux ARM64 with GLIBC 2.17, the Linux system-library baseline.
+
+The package command rebuilds the plugin and runs the full suite.
+It rejects skipped tests, checks the binary and verifies both ZIPs.
+The output goes to `test-artifacts/`; logs and tuner images go to `validation/`.
+For a build without the full suite, run `bash "build_scope_usb_v2.sh"`.
+That command regenerates the two `dist/` folders.
+The full package check must pass before those files are merged.
+
+The owner report applies only while the recorded runtime file hashes still match.
+A later code change needs another device check.
+See [the tuner integration record](docs/TUNER_INTEGRATION.md) and
+[the hardening review](REVIEW_REPORT.md) for the test scope and limits.
+
+## Performance logs
+
+Insert a FAT32 USB stick **without `debug.sh`** while the scope runs.
+The UI writes `scope_perf.log` every two seconds and includes its recent history.
+Attach that file to a bug report.
+The earlier rendering work is documented in
+[PERF4_CHANGES.md](docs/PERF4_CHANGES.md) and [PERF5_CHANGES.md](docs/PERF5_CHANGES.md).
+
+## Credits and license
+
+Thanks to **[@jchiet](https://github.com/jchiet)** for
+[PR #1: Precision](https://github.com/nutellatomato/polyscope/pull/1) and
+[PR #2: Tuner](https://github.com/nutellatomato/polyscope/pull/2).
+Their work adds the tuner, the more precise DC-offset-tolerant frequency detector,
+the host detector tests, and the build path that includes the firmware baseline.
+Their tuner controls and pitch math are preserved.
+
+This project modifies and redistributes **Poly Effects** source under its
+original open-source licenses. The scope LV2 plugin is GPL-2.0-or-later.
+The patch set is GPL-3.0. See [LICENSE](LICENSE) and the source licenses.
+This is a community project, not affiliated with or endorsed by Poly Effects.

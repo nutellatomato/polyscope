@@ -1,17 +1,23 @@
 {
   "tag": "v3f-t1-h1",
   "pr2_commit": "a16aed3c2a591c3eea56cc88aec979fca476a465",
-  "base_commit": "afd1cbfb5c5da1fdfeaeb7ebfe2b5a0a160577b1",
+  "base_commit": "b0f72ea11b792a722032ff9f15a2a81ee24d401d",
   "target": "aarch64-linux-gnu.2.17",
   "zig": "0.16.0",
-  "tests": 55,
+  "tests": 58,
   "skipped": 0,
-  "hardware_tested": false,
+  "hardware_tested": true,
+  "hardware_validation": {
+    "record": "docs/HARDWARE_VALIDATION.json",
+    "evidence": "owner report",
+    "recovery_device_tested": false,
+    "power_loss_tested": false
+  },
   "plugin_sha256": "50f2154288c19b9af5c5f70256b2d1fa974f0297baea0dd1cc6feb3735bf6ae5",
   "source_sha256": {
     "install_scope.py": "efe9a11c60b0453e1448fa3c0f326d47106e31b0f8b6c1c73d8b545b239080cb",
     "recover_scope.py": "40634e6c71a98195c77aa1b3430fa80b55bb9dc95aa3bd9467e31edb4cff3af7",
-    "build_scope_usb_v2.sh": "1d372e05cd33aae1de46bffa66569086ec0616be0507fb75e48e3c43ecd8b427",
+    "build_scope_usb_v2.sh": "17db0ab5785ab39d204d699a51ea41d5da288fef8b062d2ce35afacf9e02c91c",
     "source/polyeffects-src/PolyLV2/poly_scope2.lv2/poly_scope2.c": "af560b3b7177c58f0d2b06055be9d4eba764770f6acd68388130f01b573e7c5d",
     "source/polyeffects-src/PolyLV2/poly_scope2.lv2/Makefile": "de7c84527b98ff8e0276adcb38ce32c29d810999570d2937f2d61f49241abfbf",
     "source/polyeffects-src/PolyLV2/poly_scope2.lv2/poly_scope2.ttl": "4354f7fa9fff08e61b780251399833247de2c3a94354ae8e877a45f5da227894",
@@ -27,13 +33,17 @@
     "test_scope_datapath.py": "762dbf587852a397d8a9d9e627c1d458bc7297caed0902aad2eb0d04935452ef",
     "test_usb_wrappers.py": "6da9633e975dd37bbacf168425e7280db46e9fd4738a0061947956fe32e39c5e",
     "test_hardening.py": "46b41a06cfb79ab5be832414450f91f46c17f0a9885c1e9b0a844210b59cf251",
+    "test_package_metadata.py": "ced6db8075426c7a8ce4cdb45a73492b6d1bf66aba9b5481cfc64486c63e789d",
     "test_scope_installer.py": "1452aa896aa138aced0d4c9765592c3c961ee2f7da696e4066006f669d8b273d",
     "test_tuner_ui.py": "8f89879fb0fa7d708c260259107e83cf3e986ec2cb74cc8a7a151319f985b577",
     "test_freq_detector.py": "e7ec370b4a31b1f5fe4ddfb4668f2d8dba25a6b9f8af4acd92e513488fce3164",
-    "prepare_test_packages.py": "04a38b9580cb8801395c4cef450001fcaae6aa31633f69bf6aee7b8bd60b8283",
+    "prepare_test_packages.py": "1a9c9253204da574b97d7d59df38db5e7495fb07de5042d75f43473479762769",
     "requirements-test.txt": "3bd23691376fe7308f27295d51d5e276956f01c452168c0a3a36922ac650ace1",
-    "HECTOR_TEST_GUIDE.md": "dce9bab14dd6937c2767b0934ecba6621157cefd5cbf29528df57a8928c14017",
-    "README.md": "cf3c63d5870cc110dd853490c621b5784261f1fce82cc8bf3ec13ebe8dbd6f76",
-    "pytest.ini": "ead20977898508f9c9faf2762e5fd27bf295944bffeda853755801d6abd3a0c0"
+    "HECTOR_TEST_GUIDE.md": "73709fb41e2daae5769c81c7744bfd87e1526364c62c5d6d99b3bab162c7d45b",
+    "README.md": "f9514d3020869f912845df788f6ee3bcd5298f75d5353240ec0f9cd93658425b",
+    "pytest.ini": "ead20977898508f9c9faf2762e5fd27bf295944bffeda853755801d6abd3a0c0",
+    "docs/HARDWARE_VALIDATION.json": "2aca4ef4e218406c2733281b294a047e623737ef57e645fa6a34d7aa85d65868",
+    "docs/TUNER_INTEGRATION.md": "950c7a60f0603f21911c98630b59a62bbe8646b84fd2691b4b3c793acfba6398",
+    "REVIEW_REPORT.md": "c5ddc33be931a9ff94fd75683c774bf7252c9b54053f5141b72568d868f7d61e"
   }
 }

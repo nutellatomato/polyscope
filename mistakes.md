@@ -10,3 +10,4 @@
 - Bash process substitution failed at `/dev/fd/62` in the Mac sandbox. Use a plain file log in the inert USB-script harness. Check the actual firmware error text so an unrelated failure cannot pass the gate test.
 - A staging whitespace check failed, but the shell continued to the commit. Use `set -e` when a failed check must stop the next Git step. Correct the space and verify the final commit.
 - The evidence command ran from `test-artifacts/` but assumed the repo root. Resolve the root with `git rev-parse --show-toplevel` before reading build files.
+- Copying a staged directory on FAT exposed Mac `._` side files and stopped a replacement guard. Copy only archive-listed files, then compare the payload file list and every hash. Preserve old logs and originals before replacing the installer.

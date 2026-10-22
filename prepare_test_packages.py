@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build, test, verify and archive the experimental Hector USB packages."""
+"""Build, test, verify and archive the Hector USB packages."""
 import hashlib
 import json
 import os
@@ -23,11 +23,24 @@ def sha(path):
 def run(command, log):
     print('RUN:', ' '.join(command), flush=True)
     with (LOG / log).open('w') as f:
-        result = subprocess.run(command, cwd=ROOT, stdout=f, stderr=subprocess.STDOUT)
+        result = subprocess.run(command, cwd=ROOT, stdout=f, stderr=subprocess.STDOUT,
+                                env=dict(os.environ, PYTHONDONTWRITEBYTECODE='1'))
     if result.returncode:
         print((LOG / log).read_text()[-6000:])
         raise SystemExit('FAILED: ' + log)
     print('PASS:', log, flush=True)
+
+
+def hardware_report_matches(install):
+    report = json.loads((ROOT / 'docs/HARDWARE_VALIDATION.json').read_text())
+    return all((install / rel).is_file() and sha(install / rel) == expected
+               for rel, expected in report['tested_installer_files'].items())
+
+
+def payload_files(folder):
+    return sorted(p for p in folder.rglob('*') if p.is_file()
+                  and '__pycache__' not in p.parts and p.suffix != '.pyc'
+                  and p.name != '.DS_Store' and not p.name.startswith('._'))
 
 
 def main():
@@ -79,23 +92,26 @@ def main():
                'source/polyeffects-src/PolyLV2/poly_scope2.lv2/poly_scope2.ttl',
                'source/polyeffects-src/PolyLV2/poly_scope2.lv2/manifest.ttl']
     sources += [str((Path('source/polyeffects-src/digit_ui') / rel)) for rel in list(manifest['replace']) + list(manifest['new'])]
-    sources += [p.name for p in ROOT.glob('test_*.py')] + ['prepare_test_packages.py', 'requirements-test.txt', 'HECTOR_TEST_GUIDE.md', 'README.md', 'pytest.ini']
+    sources += [p.name for p in ROOT.glob('test_*.py')] + ['prepare_test_packages.py', 'requirements-test.txt', 'HECTOR_TEST_GUIDE.md', 'README.md', 'pytest.ini', 'docs/HARDWARE_VALIDATION.json', 'docs/TUNER_INTEGRATION.md', 'REVIEW_REPORT.md']
     receipt = {'tag': tag, 'pr2_commit': 'a16aed3c2a591c3eea56cc88aec979fca476a465',
                'base_commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
                'target': 'aarch64-linux-gnu.2.17', 'zig': subprocess.check_output([os.environ.get('ZIG', 'zig'), 'version'], text=True).strip(),
-               'tests': len(cases), 'skipped': 0, 'hardware_tested': False,
+               'tests': len(cases), 'skipped': 0, 'hardware_tested': hardware_report_matches(install),
+               'hardware_validation': {'record': 'docs/HARDWARE_VALIDATION.json', 'evidence': 'owner report',
+                                       'recovery_device_tested': False, 'power_loss_tested': False},
                'plugin_sha256': sha(plugin), 'source_sha256': {rel: sha(ROOT / rel) for rel in sources}}
     for folder in [install, recovery]:
         (folder / 'BUILD_PROVENANCE.json').write_text(json.dumps(receipt, indent=2) + '\n')
-        entries = sorted(p for p in folder.rglob('*') if p.is_file() and p.name != 'SHA256SUMS')
+        for cache in folder.rglob('__pycache__'):
+            shutil.rmtree(cache)
+        entries = [p for p in payload_files(folder) if p.name != 'SHA256SUMS']
         (folder / 'SHA256SUMS').write_text(''.join(sha(p) + '  ./' + p.relative_to(folder).as_posix() + '\n' for p in entries))
     archives = []
     for kind, folder in [('installer', install), ('recovery', recovery)]:
         dest = OUT / f'Polyscope-USB-{kind}-{tag}-review.zip'
         with zipfile.ZipFile(dest, 'w', zipfile.ZIP_DEFLATED) as z:
-            for p in sorted(folder.rglob('*')):
-                if p.is_file():
-                    z.write(p, p.relative_to(folder))
+            for p in payload_files(folder):
+                z.write(p, p.relative_to(folder))
         with zipfile.ZipFile(dest) as z:
             assert z.testzip() is None and 'debug.sh' in z.namelist()
             for line in z.read('SHA256SUMS').decode().splitlines():
@@ -104,6 +120,7 @@ def main():
         archives.append(dest)
     (OUT / 'SHA256SUMS').write_text(''.join(sha(p) + '  ' + p.name + '\n' for p in archives))
     print(f'VERIFIED: {len(cases)} tests, zero skips; ARM64 ELF; GLIBC <= 2.17; two ZIPs verified')
+    print('Runtime files match owner-tested build:', receipt['hardware_tested'])
     print((OUT / 'SHA256SUMS').read_text())
 
 

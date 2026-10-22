@@ -4,6 +4,46 @@ Public releases use semantic versioning. Each release also lists the
 internal build tag it ships (shown on the device's SETUP page and in the
 perf log), so an on-device build tag can always be matched to a release.
 
+## Unreleased — tuner integration (build `v3f-t1-h1`)
+
+The repository owner confirmed successful use of this build on their Hector
+on 2026-10-22. This records an owner report, not a measured hardware test matrix.
+The latest published release remains v2.0.0.
+
+### Added
+
+- Full-screen TUNE page, four channel readings, ±50-cent meter, ±3-cent green
+  zone and adjustable A4 reference from 400 to 480 Hz.
+- A yellow frozen-reading label and the existing RUN control.
+- Bundled firmware-407 baseline files for source builds.
+- Native detector accuracy tests and installer, recovery, USB-entry and Qt UI tests.
+- Source hashes and an owner hardware-report record for the checked payload.
+
+### Changed
+
+- The frequency detector measures crossings between samples and handles DC offsets.
+- Slow LFOs can produce a reading after one measured period.
+- The Linux ARM64 plugin targets GLIBC 2.17.
+- The README and USB guides now describe the tuner and current build.
+- The committed `dist/` installer, recovery files, plugin and checksums are rebuilt together.
+
+### Fixed
+
+- Failed upgrades can restore the previously installed version.
+- Fresh-install failures also restore generated metadata and backup state.
+- Payload checks run before an upgrade resets the old install.
+- Dry runs leave files unchanged.
+- Recovery checks all baseline files and fails if its metadata rebuild fails.
+- Installer and recovery share a lock and request read-only remount on exit.
+- ZIPs exclude host Python caches and Mac metadata side files.
+
+### Thanks
+
+Thanks to [@jchiet](https://github.com/jchiet) for
+[Precision #1](https://github.com/nutellatomato/polyscope/pull/1) and
+[Tuner #2](https://github.com/nutellatomato/polyscope/pull/2).
+Their original commits, tuner controls and pitch math are preserved.
+
 ## v2.0.0 — 2026-07-16 (build `v3f`)
 
 The data-path release: higher-fidelity traces, a fixed engine-level memory
