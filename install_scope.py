@@ -33,6 +33,7 @@ import json
 import os
 import shutil
 import subprocess
+import tempfile
 import sys
 
 # On overlay-root Hectors, writes to "/" land in a RAM-backed tmpfs upper layer
@@ -45,7 +46,7 @@ BACKUP_DIR = os.path.join(UI_DIR, ".hector_scope_backup_v2")
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PAYLOAD_DIR = os.path.join(SCRIPT_DIR, "payload")
 MANIFEST_PATH = os.path.join(PAYLOAD_DIR, "manifest.json")
-PACKAGE_VERSION = "v3f-t1"
+PACKAGE_VERSION = "v3f-t1-h1"
 PRISTINE_DIR = os.path.join(PAYLOAD_DIR, "originals")   # baseline files carried on the USB
 MARKER_PATH = os.path.join(UI_DIR, ".hector_scope_v2_done")
 
@@ -118,7 +119,7 @@ class Transaction:
                 log(f"  restored {device_path}")
             except OSError as e:
                 log(f"  WARNING: could not restore {device_path}: {e}")
-        log("Rollback complete. Device left in its original state.")
+        log("File rollback finished; the outer snapshot will restore the full prior state.")
 
 
 class AbortInstall(Exception):
@@ -415,7 +416,7 @@ def reset_to_pristine(manifest, dry_run):
                 log(f"  removed {bundle}")
 
 
-def install(dry_run):
+def _install_unprotected(dry_run):
     if not os.path.isfile(MANIFEST_PATH):
         log(f"ERROR: manifest not found at {MANIFEST_PATH}")
         return 1
@@ -424,6 +425,11 @@ def install(dry_run):
         return 1
 
     manifest = load_manifest()
+    try:
+        validate_payload(manifest)
+    except (AbortInstall, OSError) as e:
+        log(f"Installer package validation failed BEFORE any changes: {e}")
+        return 2
 
     if os.path.isfile(MARKER_PATH):
         try:
@@ -434,7 +440,8 @@ def install(dry_run):
             log(f"Version {PACKAGE_VERSION} already installed. Nothing to do.")
             return 0
         log(f"Prior install detected (marker '{installed}'); doing clean reinstall.")
-        os.makedirs(BACKUP_DIR, exist_ok=True)
+        if not dry_run:
+            os.makedirs(BACKUP_DIR, exist_ok=True)
         reset_to_pristine(manifest, dry_run)
 
     log("=== HectorScope install (checksum-gated) ===")
@@ -450,7 +457,8 @@ def install(dry_run):
         log(f"Install aborted during pre-flight: {e}")
         return 2
 
-    os.makedirs(BACKUP_DIR, exist_ok=True)
+    if not dry_run:
+        os.makedirs(BACKUP_DIR, exist_ok=True)
     tx = Transaction()
 
     try:
@@ -495,6 +503,159 @@ def install(dry_run):
     else:
         log("Install complete and verified.")
     return 0
+
+
+# Check staged files before any reset can remove the installed version.
+def validate_payload(manifest):
+    def safe_relative(rel):
+        if (not isinstance(rel, str) or not rel or os.path.isabs(rel)
+                or any(part in ("", ".", "..") for part in rel.split("/"))):
+            raise AbortInstall("invalid payload path: " + repr(rel))
+
+    for section in ("replace", "new", "lv2"):
+        if not isinstance(manifest[section], dict) or not manifest[section]:
+            raise AbortInstall("invalid manifest section: " + section)
+        for rel in manifest[section]:
+            safe_relative(rel)
+    for files in manifest["lv2"].values():
+        for name in files:
+            safe_relative(name)
+    for rel, info in manifest["replace"].items():
+        original = os.path.join(PRISTINE_DIR, rel)
+        if not os.path.isfile(original) or sha256(original) != info["baseline"]:
+            raise AbortInstall("missing/corrupt baseline original: " + rel)
+        src = os.path.join(PAYLOAD_DIR, "files", rel)
+        if not os.path.isfile(src) or sha256(src) != info["patched"]:
+            raise AbortInstall("missing/corrupt replacement: " + rel)
+    for rel, expected in manifest["new"].items():
+        src = os.path.join(PAYLOAD_DIR, "files", rel)
+        if not os.path.isfile(src) or sha256(src) != expected:
+            raise AbortInstall("missing/corrupt new file: " + rel)
+    for bundle, files in manifest["lv2"].items():
+        for name, expected in files.items():
+            src = os.path.join(PAYLOAD_DIR, "lv2", bundle, name)
+            if not os.path.isfile(src) or sha256(src) != expected:
+                raise AbortInstall("missing/corrupt LV2 file: " + bundle + "/" + name)
+
+
+class UpgradeSnapshot:
+    """Persistent snapshot of managed files; not power-loss recovery."""
+
+    def __init__(self, manifest):
+        targets = []
+        for rel in list(manifest["replace"]) + list(manifest["new"]):
+            targets.append(os.path.join(UI_DIR, rel))
+        targets += [
+            os.path.join(UI_DIR, "qml", "Scope.qml"),
+            os.path.join(UI_DIR, "qml", "module_info.js"),
+            os.path.join(LV2_DIR, "poly_scope.lv2"),
+            BACKUP_DIR,
+            MARKER_PATH,
+            os.path.join(UI_DIR, "__pycache__"),
+        ]
+        targets += [os.path.join(LV2_DIR, bundle) for bundle in manifest["lv2"]]
+        self.targets = list(dict.fromkeys(targets))
+        self.directory = None
+        self.existed = []
+        self.restore_attempted = False
+        self.restore_ok = False
+
+    @staticmethod
+    def _remove(path):
+        if os.path.islink(path) or os.path.isfile(path):
+            os.unlink(path)
+        elif os.path.isdir(path):
+            shutil.rmtree(path)
+
+    def __enter__(self):
+        # Capture must complete before the first device write.
+        self.directory = tempfile.mkdtemp(prefix=".polyscope-upgrade-", dir=UI_DIR)
+        try:
+            for i, path in enumerate(self.targets):
+                exists = os.path.lexists(path)
+                self.existed.append(exists)
+                if not exists:
+                    continue
+                dest = os.path.join(self.directory, str(i))
+                if os.path.islink(path):
+                    os.symlink(os.readlink(path), dest)
+                elif os.path.isdir(path):
+                    shutil.copytree(path, dest, symlinks=True)
+                else:
+                    shutil.copy2(path, dest)
+            log("Captured complete existing installation for upgrade rollback")
+            return self
+        except BaseException:
+            self.cleanup()
+            raise
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        # The caller restores failures and retains incomplete restores.
+        return False
+
+    def restore(self):
+        log("Upgrade failed: restoring prior installed version and version marker")
+        self.restore_attempted = True
+        errors = []
+        for i, path in enumerate(self.targets):
+            try:
+                self._remove(path)
+                if not self.existed[i]:
+                    continue
+                src = os.path.join(self.directory, str(i))
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                if os.path.islink(src):
+                    os.symlink(os.readlink(src), path)
+                elif os.path.isdir(src):
+                    shutil.copytree(src, path, symlinks=True)
+                else:
+                    shutil.copy2(src, path)
+            except OSError as e:
+                errors.append(f"{path}: {e}")
+        if errors:
+            # Never silently claim recovery if any restoration failed.
+            raise RuntimeError("UPGRADE RESTORE INCOMPLETE: " + "; ".join(errors))
+        self.restore_ok = True
+        log("Previous installation restored; remove the install USB before restart")
+
+    def cleanup(self):
+        if self.restore_attempted and not self.restore_ok:
+            log("CRITICAL: incomplete restore; keeping recovery snapshot at " + self.directory)
+            return
+        if self.directory and os.path.isdir(self.directory):
+            shutil.rmtree(self.directory)
+
+
+def install(dry_run):
+    try:
+        manifest = load_manifest()
+        validate_payload(manifest)
+    except (OSError, ValueError, KeyError, TypeError, AbortInstall) as e:
+        log(f"Installer package is invalid: {e}")
+        return 2
+    if not os.path.isdir(UI_DIR):
+        log(f"ERROR: UI directory not found at {UI_DIR}")
+        return 1
+    if dry_run:
+        return _install_unprotected(True)
+    if os.path.isfile(MARKER_PATH):
+        with open(MARKER_PATH) as f:
+            if f.read().strip() == PACKAGE_VERSION:
+                return _install_unprotected(False)
+    # Fresh installs also need the generated JS, caches and backup state restored.
+    snapshot = UpgradeSnapshot(manifest)
+    try:
+        with snapshot:
+            try:
+                result = _install_unprotected(False)
+            except BaseException:
+                snapshot.restore()
+                raise
+            if result != 0:
+                snapshot.restore()
+            return result
+    finally:
+        snapshot.cleanup()
 
 
 def main():

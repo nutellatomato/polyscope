@@ -86,6 +86,36 @@ def sha(path):
 MANIFEST = json.load(open(os.path.join(PAYLOAD, "manifest.json")))
 
 
+# Refuse to validate stale dist artifacts. The installer tests intentionally
+# exercise the generated USB tree, not a historical checked-in dist package.
+SRC_INSTALLER = os.path.join(REPO, "install_scope.py")
+SRC_QML = os.path.join(UI_SRC, "qml", "Polyscope.qml")
+STAGED_QML = os.path.join(PAYLOAD, "files", "qml", "Polyscope.qml")
+if not os.path.isfile(INSTALLER) or not os.path.isfile(STAGED_QML):
+    raise SystemExit("Build the new USB installer before running installer tests")
+if open(SRC_INSTALLER, "rb").read() != open(INSTALLER, "rb").read():
+    raise SystemExit("Stale dist installer: rebuild before testing")
+if open(SRC_QML, "rb").read() != open(STAGED_QML, "rb").read():
+    raise SystemExit("Stale dist QML: rebuild before testing")
+
+if sha(STAGED_QML) != MANIFEST["new"]["qml/Polyscope.qml"]:
+    raise SystemExit("Stale or corrupt manifest: rebuild before testing")
+
+for rel, info in MANIFEST["replace"].items():
+    if sha(os.path.join(UI_SRC, rel)) != info["patched"]:
+        raise SystemExit("Stale replacement source: " + rel)
+    if sha(os.path.join(PAYLOAD, "files", rel)) != info["patched"]:
+        raise SystemExit("Corrupt staged replacement: " + rel)
+    if sha(os.path.join(PAYLOAD, "originals", rel)) != info["baseline"]:
+        raise SystemExit("Corrupt staged baseline: " + rel)
+for rel, expected in MANIFEST["new"].items():
+    if sha(os.path.join(UI_SRC, rel)) != expected or sha(os.path.join(PAYLOAD, "files", rel)) != expected:
+        raise SystemExit("Stale or corrupt new file: " + rel)
+for bundle, files in MANIFEST["lv2"].items():
+    for name, expected in files.items():
+        if sha(os.path.join(PAYLOAD, "lv2", bundle, name)) != expected:
+            raise SystemExit("Corrupt staged LV2 file: " + name)
+
 print("\n=== Test 1: fresh baseline install ===")
 root, ui, lv2 = fresh_sandbox()
 inst = load_installer(ui, lv2)
@@ -152,8 +182,8 @@ rc = inst.install(dry_run=False)
 check("install returns 1 on mid-failure", rc == 1)
 check("all replaced files rolled back to baseline",
       all(sha(os.path.join(ui, rel)) == baseline_shas[rel] for rel in MANIFEST["replace"]))
-check("Scope.qml removed on rollback", not os.path.isfile(os.path.join(ui, "qml", "Scope.qml")))
-check("LV2 removed on rollback", not os.path.isdir(os.path.join(lv2, "poly_scope.lv2")))
+check("Polyscope.qml removed on rollback", not os.path.isfile(os.path.join(ui, "qml", "Polyscope.qml")))
+check("LV2 removed on rollback", not os.path.isdir(os.path.join(lv2, "poly_scope2.lv2")))
 shutil.rmtree(root)
 
 
@@ -166,8 +196,8 @@ inst2 = load_installer(ui, lv2)
 inst2.uninstall(dry_run=False)
 check("files restored to baseline",
       all(sha(os.path.join(ui, rel)) == baseline_shas[rel] for rel in MANIFEST["replace"]))
-check("Scope.qml removed", not os.path.isfile(os.path.join(ui, "qml", "Scope.qml")))
-check("LV2 removed", not os.path.isdir(os.path.join(lv2, "poly_scope.lv2")))
+check("Polyscope.qml removed", not os.path.isfile(os.path.join(ui, "qml", "Polyscope.qml")))
+check("LV2 removed", not os.path.isdir(os.path.join(lv2, "poly_scope2.lv2")))
 shutil.rmtree(root)
 
 
@@ -197,6 +227,53 @@ inst3 = load_installer(ui, lv2)
 check("same-version reinstall returns 0", inst3.install(dry_run=False) == 0)
 shutil.rmtree(root)
 
+
+print("\n=== Test 7: failed version upgrade restores the last working install ===")
+root, ui, lv2 = fresh_sandbox()
+inst = load_installer(ui, lv2)
+check("initial version installs", inst.install(dry_run=False) == 0)
+marker = os.path.join(ui, ".hector_scope_v2_done")
+# Treat the installed package as the prior working release; changing marker
+# forces an upgrade, during which the code restores to firmware baseline.
+with open(marker, "w") as f:
+    f.write("v3f-prior")
+watch = ([os.path.join(ui, rel) for rel in list(MANIFEST["replace"]) + list(MANIFEST["new"])]
+         + [os.path.join(ui, "qml/module_info.js"), marker]
+         + [os.path.join(lv2, bundle, name)
+            for bundle, files in MANIFEST["lv2"].items() for name in files])
+before = {path: sha(path) for path in watch}
+# Trigger a genuine failure *after* the destructive reset_to_pristine stage.
+with open(os.path.join(ui, "effect_proto_to_js.py"), "w") as f:
+    f.write("import sys\nsys.exit(7)\n")
+inst = load_installer(ui, lv2)
+rc = inst.install(dry_run=False)
+check("upgrade failure returned an error", rc != 0)
+check("previous version's entire managed UI and plugin restored",
+      all(os.path.isfile(p) and sha(p) == expected for p, expected in before.items()))
+check("previous version marker preserved", open(marker).read().strip() == "v3f-prior")
+check("temporary upgrade snapshot cleaned",
+      not any(n.startswith(".polyscope-upgrade-") for n in os.listdir(ui)))
+shutil.rmtree(root)
+
+print("\n=== Test 8: invalid payload aborts before touching an older version ===")
+root, ui, lv2 = fresh_sandbox()
+inst = load_installer(ui, lv2)
+check("initial install for payload-safety test", inst.install(dry_run=False) == 0)
+marker = os.path.join(ui, ".hector_scope_v2_done")
+with open(marker, "w") as f:
+    f.write("v3f-prior")
+original = open(STAGED_QML, "rb").read()
+try:
+    with open(STAGED_QML, "ab") as f:
+        f.write(b"\n// simulate a damaged USB payload\n")
+    inst2 = load_installer(ui, lv2)
+    check("damaged staged QML rejected before reset", inst2.install(dry_run=False) == 2)
+    check("prior version and UI untouched",
+          open(marker).read() == "v3f-prior" and os.path.isfile(os.path.join(ui, "qml/Polyscope.qml")))
+finally:
+    with open(STAGED_QML, "wb") as f:
+        f.write(original)
+shutil.rmtree(root)
 
 print(f"\n{'='*50}\nRESULTS: {len(PASS)} passed, {len(FAIL)} failed")
 if FAIL:

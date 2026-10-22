@@ -1,0 +1,20 @@
+{
+  "replace": {
+    "module_info.py": {"baseline": "86171480bf644feccecda7de518fb21953a2b8c34343f40d5386d012ea15a0be", "patched": "57caf158ab001a9886ea92ce076b88e83863d26d5dd6bb8014a24cd45aa20e33", "critical": true},
+    "show_widget.py": {"baseline": "135e3fc0b8d7120afb77a442c7cc3d204a98017b4f0b0d4bb2a0db8512600654", "patched": "4aad1f24306187e26c386fd4393c9cf1658200d1220b55dc8e587327cf8bfde3", "critical": true},
+    "ingen_wrapper.py": {"baseline": "63ce37cb478b6a6b2c3bd18cc29753fd98d04bcc871a8c29ca1490560861db03", "patched": "9b25ecf85d90bc82b09079cdaabbfa89183656a75c8a13b7a473cd1e32c8bfd0", "critical": true},
+    "qml/PatchBayEffect.qml": {"baseline": "9c90fd898c70919dd1944efa9de455c7da40779b86cbd414c3256829a8434bef", "patched": "67fa6b23c5b50101cbb1bc3b0280022996141b54a6edee641e2939d435f9ca12", "critical": true},
+    "headless.py": {"baseline": "f89c86258c355c5866163a49cbefda356a5fe4e1a9c4d815ad96602fe1c68de0", "patched": "8c702411b4f3c792ba7eb424285cde71ab49e9abaac894bb0c6f315ad08c3194", "critical": false}
+  },
+  "new": {
+    "qml/Polyscope.qml": "6e09e0c596f5646ccc312ca19457b7f2bc2404cd9dfbff5e906bb4803181b049",
+    "scope_util.py": "1012ea29bbd89948669aaeba8dd98c024bdbbeb58c1d16fcceda903a4a41ada8"
+  },
+  "lv2": {
+    "poly_scope2.lv2": {
+      "poly_scope2.so": "50f2154288c19b9af5c5f70256b2d1fa974f0297baea0dd1cc6feb3735bf6ae5",
+      "poly_scope2.ttl": "4354f7fa9fff08e61b780251399833247de2c3a94354ae8e877a45f5da227894",
+      "manifest.ttl": "4146624773ebc2d276ef3dfd991f0132ba401e39f6ef6fb5c063af9a3eff8740"
+    }
+  }
+}
