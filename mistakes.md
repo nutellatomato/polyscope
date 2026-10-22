@@ -11,3 +11,4 @@
 - A staging whitespace check failed, but the shell continued to the commit. Use `set -e` when a failed check must stop the next Git step. Correct the space and verify the final commit.
 - The evidence command ran from `test-artifacts/` but assumed the repo root. Resolve the root with `git rev-parse --show-toplevel` before reading build files.
 - Copying a staged directory on FAT exposed Mac `._` side files and stopped a replacement guard. Copy only archive-listed files, then compare the payload file list and every hash. Preserve old logs and originals before replacing the installer.
+- The first ZIP builder included host `__pycache__` files after tests imported the staged installer. Disable bytecode writes for test children, remove staged caches, and filter host-only files from every archive.
